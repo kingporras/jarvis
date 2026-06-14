@@ -1,5 +1,7 @@
 # JARVIS
 
+Private personal operating system for Victor: productivity, projects, memory, tasks and AI assistance.
+
 Base frontend inicial de JARVIS como PWA responsive con React, Vite y TypeScript.
 
 JARVIS es un sistema operativo personal privado para Victor. Este Sprint 1 solo crea el chasis visual y técnico: dashboard, navegación, páginas placeholder, componentes reutilizables, tema oscuro y configuración PWA básica. No incluye backend, login, OpenAI API, Cloudflare Workers, D1, integraciones, agentes ni persistencia real.
@@ -48,7 +50,7 @@ npm run preview
 - App shell responsive
 - Sidebar en escritorio
 - Navegación inferior en móvil
-- Paginas placeholder para Dashboard, Chat JARVIS, Memoria, Proyectos, Tareas, Decisiones, Personas, Recordatorios y Ajustes
+- Páginas placeholder para Dashboard, Chat JARVIS, Memoria, Proyectos, Tareas, Decisiones, Personas, Recordatorios y Ajustes
 - Manifest PWA básico, favicon e iconos placeholder
 
 ## Fuera de alcance
