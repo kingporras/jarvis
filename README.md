@@ -43,6 +43,12 @@ npm run preview
 - Output directory: `dist`
 - Framework preset: Vite
 
+## Sprint 2 - Backend base con Cloudflare D1
+
+Sprint 2 anade Cloudflare Pages Functions bajo `/api/*`, migraciones D1, seed de desarrollo y configuracion Wrangler con binding `DB`.
+
+Guia completa: [docs/sprint-2-backend-d1.md](docs/sprint-2-backend-d1.md)
+
 ## Alcance de Sprint 1
 
 - React + Vite + TypeScript
