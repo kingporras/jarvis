@@ -58,6 +58,8 @@ web_modules/
 .env
 .env.*
 !.env.example
+.dev.vars
+.dev.vars.*
 
 # Framework output kept out of repo
 .next

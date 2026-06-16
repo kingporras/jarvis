@@ -12,6 +12,7 @@ import { TasksPage } from "../pages/TasksPage";
 export const routes: RouteDefinition[] = [
   {
     key: "dashboard",
+    path: "/",
     title: "Centro de mando",
     eyebrow: "Dashboard",
     description:
@@ -20,6 +21,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "chat",
+    path: "/chat",
     title: "Chat JARVIS",
     eyebrow: "Modulo conversacional",
     description:
@@ -28,6 +30,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "memory",
+    path: "/memory",
     title: "Memoria",
     eyebrow: "Reactor arc",
     description:
@@ -36,6 +39,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "projects",
+    path: "/projects",
     title: "Proyectos",
     eyebrow: "Frentes activos",
     description:
@@ -44,6 +48,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "tasks",
+    path: "/tasks",
     title: "Tareas",
     eyebrow: "Ejecución",
     description:
@@ -52,6 +57,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "decisions",
+    path: "/decisions",
     title: "Decisiones",
     eyebrow: "Criterio",
     description:
@@ -60,6 +66,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "persons",
+    path: "/persons",
     title: "Personas",
     eyebrow: "Relaciones",
     description:
@@ -68,6 +75,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "reminders",
+    path: "/reminders",
     title: "Recordatorios",
     eyebrow: "Señales",
     description:
@@ -76,6 +84,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     key: "settings",
+    path: "/settings",
     title: "Ajustes",
     eyebrow: "Sistema",
     description:
@@ -86,4 +95,8 @@ export const routes: RouteDefinition[] = [
 
 export function getRouteByKey(key: RouteDefinition["key"]) {
   return routes.find((route) => route.key === key) ?? routes[0];
+}
+
+export function getRouteByPath(pathname: string) {
+  return routes.find((route) => route.path === pathname) ?? routes[0];
 }

@@ -49,6 +49,12 @@ Sprint 2 anade Cloudflare Pages Functions bajo `/api/*`, migraciones D1, seed de
 
 Guia completa: [docs/sprint-2-backend-d1.md](docs/sprint-2-backend-d1.md)
 
+## Sprint 3 - Auth privada
+
+Sprint 3 anade login privado de usuario unico, sesiones opacas con cookie HttpOnly y hashes de sesion en D1.
+
+Guia completa: [docs/auth.md](docs/auth.md)
+
 ## Alcance de Sprint 1
 
 - React + Vite + TypeScript

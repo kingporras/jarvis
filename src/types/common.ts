@@ -32,6 +32,7 @@ export interface NavItem {
 
 export interface RouteDefinition {
   key: PageKey;
+  path: string;
   title: string;
   eyebrow: string;
   description: string;

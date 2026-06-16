@@ -1,5 +1,7 @@
+import { useAuth } from "../auth/AuthProvider";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 
@@ -11,6 +13,14 @@ const settings = [
 ];
 
 export function SettingsPage() {
+  const { logout } = useAuth();
+
+  async function handleLogout() {
+    await logout();
+    window.history.replaceState({}, "", "/login");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -34,6 +44,18 @@ export function SettingsPage() {
               <strong>{setting.value}</strong>
             </div>
           ))}
+        </div>
+      </Card>
+
+      <Card className="panel">
+        <div className="panel__header">
+          <div>
+            <span>Acceso privado</span>
+            <h2>Sesion de Victor</h2>
+          </div>
+          <Button onClick={handleLogout} variant="secondary">
+            Cerrar sesion
+          </Button>
         </div>
       </Card>
 

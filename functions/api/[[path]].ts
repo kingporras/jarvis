@@ -1,35 +1,7 @@
-type D1Value = string | number | null;
-
-interface D1Result<T> {
-  results?: T[];
-  success: boolean;
-  meta: Record<string, unknown>;
-}
-
-interface D1PreparedStatement {
-  bind(...values: D1Value[]): D1PreparedStatement;
-  first<T = Record<string, unknown>>(columnName?: string): Promise<T | null>;
-  all<T = Record<string, unknown>>(): Promise<D1Result<T>>;
-  run<T = Record<string, unknown>>(): Promise<D1Result<T>>;
-}
-
-interface D1Database {
-  prepare(query: string): D1PreparedStatement;
-}
-
-interface Env {
-  DB?: D1Database;
-}
-
-type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: string };
-
-interface PagesContext {
-  request: Request;
-  env: Env;
-  params: {
-    path?: string | string[];
-  };
-}
+import { createSession, getAuthenticatedUser, nowIso, revokeSession, validatePassword } from "../lib/auth";
+import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
+import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
+import type { D1Database, D1Value, PagesContext } from "../lib/types";
 
 interface Project {
   id: string;
@@ -91,15 +63,6 @@ interface Reminder {
   updated_at: string;
 }
 
-class HttpError extends Error {
-  status: number;
-
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
-
 const projectColumns = [
   "id",
   "name",
@@ -153,52 +116,9 @@ const decisionColumns = [
 const priorityOrderSql =
   "CASE priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 ELSE 4 END";
 
-function json<T>(data: T, init: ResponseInit = {}): Response {
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json; charset=utf-8");
-
-  return new Response(JSON.stringify(data), {
-    ...init,
-    headers,
-  });
-}
-
-function success<T>(data: T, init?: ResponseInit): Response {
-  return json<ApiResponse<T>>({ ok: true, data }, init);
-}
-
-function error(message: string, status = 400): Response {
-  return json<ApiResponse<never>>({ ok: false, error: message }, { status });
-}
-
-function notFound(): Response {
-  return error("Not found", 404);
-}
-
-async function readJson(request: Request): Promise<Record<string, unknown>> {
-  try {
-    const payload = await request.json();
-    return asObject(payload);
-  } catch {
-    throw new HttpError("Invalid JSON payload", 400);
-  }
-}
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
 function newId(prefix?: string): string {
   const id = crypto.randomUUID();
   return prefix ? `${prefix}_${id}` : id;
-}
-
-function asObject(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpError("JSON payload must be an object", 400);
-  }
-
-  return value as Record<string, unknown>;
 }
 
 function requiredString(payload: Record<string, unknown>, field: string): string {
@@ -250,50 +170,6 @@ function getPath(params: PagesContext["params"]): string {
   return `/${path}`.replace(/\/+/g, "/");
 }
 
-function getDb(env: Env): D1Database {
-  if (!env.DB) {
-    throw new HttpError("D1 binding DB is not configured", 503);
-  }
-
-  return env.DB;
-}
-
-function prepare(
-  db: D1Database,
-  query: string,
-  values: D1Value[] = [],
-): D1PreparedStatement {
-  const statement = db.prepare(query);
-  return values.length > 0 ? statement.bind(...values) : statement;
-}
-
-async function allRows<T>(
-  db: D1Database,
-  query: string,
-  values: D1Value[] = [],
-): Promise<T[]> {
-  const result = await prepare(db, query, values).all<T>();
-  return result.results ?? [];
-}
-
-async function firstRow<T>(
-  db: D1Database,
-  query: string,
-  values: D1Value[] = [],
-): Promise<T | null> {
-  const result = await prepare(db, query, values).all<T>();
-  return result.results?.[0] ?? null;
-}
-
-async function countRows(
-  db: D1Database,
-  query: string,
-  values: D1Value[] = [],
-): Promise<number> {
-  const row = await firstRow<{ count: number }>(db, query, values);
-  return Number(row?.count ?? 0);
-}
-
 async function handleHealth(db: D1Database): Promise<Response> {
   await firstRow<{ ok: number }>(db, "SELECT 1 as ok");
 
@@ -302,6 +178,56 @@ async function handleHealth(db: D1Database): Promise<Response> {
     service: "jarvis-api",
     db: "connected",
     timestamp: nowIso(),
+  });
+}
+
+async function handleLogin(context: PagesContext): Promise<Response> {
+  const payload = await readJson(context.request);
+  const password = requiredString(payload, "password");
+  const isValidPassword = await validatePassword(context.env, password);
+
+  if (!isValidPassword) {
+    return error("Invalid credentials", 401);
+  }
+
+  const session = await createSession(context.request, context.env);
+
+  return json(
+    {
+      ok: true,
+      user: session.user,
+    },
+    {
+      headers: {
+        "Set-Cookie": session.cookie,
+      },
+    },
+  );
+}
+
+async function handleLogout(context: PagesContext): Promise<Response> {
+  const cookie = await revokeSession(context.request, context.env);
+
+  return json(
+    { ok: true },
+    {
+      headers: {
+        "Set-Cookie": cookie,
+      },
+    },
+  );
+}
+
+async function handleMe(context: PagesContext): Promise<Response> {
+  const user = await getAuthenticatedUser(context.request, context.env);
+
+  if (!user) {
+    return error("Unauthorized", 401);
+  }
+
+  return json({
+    ok: true,
+    user,
   });
 }
 
@@ -594,6 +520,18 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (method === "OPTIONS") {
     return json({ ok: true });
+  }
+
+  if (path === "/auth/login" && method === "POST") {
+    return handleLogin(context);
+  }
+
+  if (path === "/auth/logout" && method === "POST") {
+    return handleLogout(context);
+  }
+
+  if (path === "/auth/me" && method === "GET") {
+    return handleMe(context);
   }
 
   const db = getDb(context.env);
