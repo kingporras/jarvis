@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/ui/Button";
+import { AUTH_ENABLED } from "../config/auth";
 
 function sanitizeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
@@ -26,6 +27,12 @@ export function LoginPage() {
   }, []);
 
   useEffect(() => {
+    if (!AUTH_ENABLED) {
+      navigateTo("/");
+    }
+  }, []);
+
+  useEffect(() => {
     if (!isLoading && isAuthenticated) {
       navigateTo(nextPath);
     }
@@ -46,6 +53,10 @@ export function LoginPage() {
 
     setPassword("");
     setError("Credenciales no validas");
+  }
+
+  if (!AUTH_ENABLED) {
+    return null;
   }
 
   return (

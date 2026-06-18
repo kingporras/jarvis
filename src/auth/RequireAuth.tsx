@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "./AuthProvider";
+import { AUTH_ENABLED } from "../config/auth";
 
 interface RequireAuthProps {
   children: ReactNode;
@@ -14,11 +15,15 @@ export function RequireAuth({ children }: RequireAuthProps) {
   const { isAuthenticated, isLoading } = useAuth();
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (AUTH_ENABLED && !isLoading && !isAuthenticated) {
       window.history.replaceState({}, "", loginUrlForCurrentPath());
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
   }, [isAuthenticated, isLoading]);
+
+  if (!AUTH_ENABLED) {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return (

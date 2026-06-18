@@ -1,6 +1,7 @@
 import { getAuthenticatedUser } from "../lib/auth";
 import { error } from "../lib/responses";
 import type { PagesContext } from "../lib/types";
+import { AUTH_ENABLED } from "../../src/config/auth";
 
 interface MiddlewareContext extends PagesContext {
   next: () => Promise<Response>;
@@ -19,6 +20,10 @@ export async function onRequest(context: MiddlewareContext): Promise<Response> {
 
   if (method === "OPTIONS" || PUBLIC_API_PATHS.has(pathname)) {
     return context.next();
+  }
+
+  if (!AUTH_ENABLED) {
+    return error("Unauthorized", 401);
   }
 
   try {

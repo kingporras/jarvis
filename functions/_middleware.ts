@@ -1,5 +1,6 @@
 import { getAuthenticatedUser } from "./lib/auth";
 import type { PagesContext } from "./lib/types";
+import { AUTH_ENABLED } from "../src/config/auth";
 
 interface MiddlewareContext extends PagesContext {
   next: () => Promise<Response>;
@@ -36,6 +37,12 @@ export async function onRequest(context: MiddlewareContext): Promise<Response> {
 
   if (pathname.startsWith("/api/") || isStaticAsset(pathname)) {
     return context.next();
+  }
+
+  if (!AUTH_ENABLED) {
+    return pathname === "/login" || pathname === "/login/"
+      ? Response.redirect(new URL("/", url.origin).toString(), 302)
+      : context.next();
   }
 
   const user = await getAuthenticatedUser(context.request, context.env).catch(() => null);

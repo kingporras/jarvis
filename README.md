@@ -55,6 +55,16 @@ Sprint 3 anade login privado de usuario unico, sesiones opacas con cookie HttpOn
 
 Guia completa: [docs/auth.md](docs/auth.md)
 
+## Sprint 3A - Passwordless Demo Mode
+
+La autenticacion esta deshabilitada temporalmente para una fase publica de demo/desarrollo. Las rutas visuales de la PWA cargan sin login ni contrasena, pero esto no habilita APIs de datos ni escrituras publicas.
+
+- El interruptor esta en `src/config/auth.ts` como `AUTH_ENABLED = false`.
+- Mientras siga en `false`, no introduzcas datos personales, memoria real, tareas reales, proyectos reales, decisiones reales, secretos ni integraciones.
+- Las rutas visuales son publicas temporalmente, pero los endpoints de datos bajo `/api/*` siguen cerrados sin sesion y el frontend no se conecta a D1.
+- `sessions` y `migrations/0002_auth_sessions.sql` se conservan de forma intencional para reactivar auth mas adelante.
+- Antes de usar informacion sensible o integraciones, cambia `AUTH_ENABLED` a `true` y configura `JARVIS_AUTH_PASSWORD_HASH` como secreto en Cloudflare Pages.
+
 ## Alcance de Sprint 1
 
 - React + Vite + TypeScript

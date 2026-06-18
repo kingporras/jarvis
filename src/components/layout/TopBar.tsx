@@ -1,5 +1,6 @@
 import type { RouteDefinition } from "../../types/common";
 import { useAuth } from "../../auth/AuthProvider";
+import { AUTH_ENABLED } from "../../config/auth";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 
@@ -22,13 +23,15 @@ export function TopBar({ activeRoute }: TopBarProps) {
         <span className="topbar__kicker">JARVIS</span>
         <strong>{activeRoute.title}</strong>
       </div>
-      <div className="topbar__status" aria-label="Estado del sistema">
-        <Badge tone="success">Privado</Badge>
-        <Badge>Sesion Victor</Badge>
-        <Button className="topbar__logout" onClick={handleLogout} variant="ghost">
-          Salir
-        </Button>
-      </div>
+      {AUTH_ENABLED ? (
+        <div className="topbar__status" aria-label="Estado del sistema">
+          <Badge tone="success">Privado</Badge>
+          <Badge>Sesion Victor</Badge>
+          <Button className="topbar__logout" onClick={handleLogout} variant="ghost">
+            Salir
+          </Button>
+        </div>
+      ) : null}
     </header>
   );
 }

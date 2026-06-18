@@ -2,6 +2,7 @@ import { createSession, getAuthenticatedUser, nowIso, revokeSession, validatePas
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
 import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
 import type { D1Database, D1Value, PagesContext } from "../lib/types";
+import { AUTH_ENABLED } from "../../src/config/auth";
 
 interface Project {
   id: string;
@@ -520,6 +521,18 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (method === "OPTIONS") {
     return json({ ok: true });
+  }
+
+  if (!AUTH_ENABLED && path === "/auth/login" && method === "POST") {
+    return error("Authentication is disabled", 503);
+  }
+
+  if (!AUTH_ENABLED && path === "/auth/logout" && method === "POST") {
+    return error("Authentication is disabled", 503);
+  }
+
+  if (!AUTH_ENABLED && path === "/auth/me" && method === "GET") {
+    return error("Unauthorized", 401);
   }
 
   if (path === "/auth/login" && method === "POST") {

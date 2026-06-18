@@ -13,6 +13,7 @@ import {
   logoutSession,
   type AuthUser,
 } from "./authClient";
+import { AUTH_ENABLED } from "../config/auth";
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -31,9 +32,15 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(AUTH_ENABLED);
 
   const refresh = useCallback(async () => {
+    if (!AUTH_ENABLED) {
+      setUser(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
 
     try {
@@ -50,6 +57,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [refresh]);
 
   const login = useCallback(async (password: string) => {
+    if (!AUTH_ENABLED) {
+      setUser(null);
+      return false;
+    }
+
     try {
       const nextUser = await loginWithPassword(password);
       setUser(nextUser);
@@ -61,6 +73,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, []);
 
   const logout = useCallback(async () => {
+    if (!AUTH_ENABLED) {
+      setUser(null);
+      return;
+    }
+
     await logoutSession().catch(() => undefined);
     setUser(null);
   }, []);

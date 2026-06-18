@@ -4,6 +4,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
+import { AUTH_ENABLED } from "../config/auth";
 
 const settings = [
   { label: "Modelo IA futuro", value: "No configurado" },
@@ -47,17 +48,19 @@ export function SettingsPage() {
         </div>
       </Card>
 
-      <Card className="panel">
-        <div className="panel__header">
-          <div>
-            <span>Acceso privado</span>
-            <h2>Sesion de Victor</h2>
+      {AUTH_ENABLED ? (
+        <Card className="panel">
+          <div className="panel__header">
+            <div>
+              <span>Acceso privado</span>
+              <h2>Sesion de Victor</h2>
+            </div>
+            <Button onClick={handleLogout} variant="secondary">
+              Cerrar sesion
+            </Button>
           </div>
-          <Button onClick={handleLogout} variant="secondary">
-            Cerrar sesion
-          </Button>
-        </div>
-      </Card>
+        </Card>
+      ) : null}
 
       <EmptyState
         badge="Exportación futura"
