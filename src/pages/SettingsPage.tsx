@@ -4,7 +4,7 @@ import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
-import { AUTH_ENABLED } from "../config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 const settings = [
   { label: "Modelo IA futuro", value: "No configurado" },

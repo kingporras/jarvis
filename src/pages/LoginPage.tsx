@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/ui/Button";
-import { AUTH_ENABLED } from "../config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 function sanitizeNext(value: string | null): string {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {

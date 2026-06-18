@@ -1,6 +1,6 @@
 import type { RouteDefinition } from "../../types/common";
 import { useAuth } from "../../auth/AuthProvider";
-import { AUTH_ENABLED } from "../../config/auth";
+import { AUTH_ENABLED } from "../../../shared/auth-config";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 

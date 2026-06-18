@@ -1,7 +1,7 @@
 import { getAuthenticatedUser } from "../lib/auth";
 import { error } from "../lib/responses";
 import type { PagesContext } from "../lib/types";
-import { AUTH_ENABLED } from "../../src/config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 interface MiddlewareContext extends PagesContext {
   next: () => Promise<Response>;

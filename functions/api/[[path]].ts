@@ -2,7 +2,7 @@ import { createSession, getAuthenticatedUser, nowIso, revokeSession, validatePas
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
 import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
 import type { D1Database, D1Value, PagesContext } from "../lib/types";
-import { AUTH_ENABLED } from "../../src/config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 interface Project {
   id: string;

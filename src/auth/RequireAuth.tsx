@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { useAuth } from "./AuthProvider";
-import { AUTH_ENABLED } from "../config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 interface RequireAuthProps {
   children: ReactNode;

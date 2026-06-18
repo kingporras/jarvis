@@ -13,7 +13,7 @@ import {
   logoutSession,
   type AuthUser,
 } from "./authClient";
-import { AUTH_ENABLED } from "../config/auth";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 
 interface AuthContextValue {
   isAuthenticated: boolean;
