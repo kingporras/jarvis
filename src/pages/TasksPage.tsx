@@ -1,49 +1,47 @@
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
+import { TaskRow } from "../components/tasks/TaskRow";
 import { Badge } from "../components/ui/Badge";
-import { Card } from "../components/ui/Card";
-import { EmptyState } from "../components/ui/EmptyState";
-
-const taskGroups = [
-  { title: "Hoy", items: ["Validar responsive en iPhone", "Revisar build para Cloudflare Pages"] },
-  { title: "Después", items: ["Diseñar tablas D1", "Definir contrato de conversaciones"] }
-];
+import { FilterChipGroup } from "../components/ui/FilterChipGroup";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { tasks } from "../data/mockJarvisData";
+import type { TaskLane } from "../types/jarvis";
 
 export function TasksPage() {
+  const [lane, setLane] = useState<TaskLane>("today");
+  const visibleTasks = useMemo(() => tasks.filter((task) => task.lane === lane), [lane]);
+
   return (
     <div className="page-stack">
       <PageHeader
-        description="Bandeja inicial para ejecución diaria. Todavía no guarda cambios ni agenda acciones."
-        eyebrow="Ejecución"
+        description="Lectura rapida por prioridad, estado, proyecto y fecha mock. Nada se persiste."
+        eyebrow="Ejecucion local"
         title="Tareas"
       />
 
-      <section className="two-column-grid">
-        {taskGroups.map((group) => (
-          <Card className="panel" key={group.title}>
-            <div className="panel__header">
-              <div>
-                <span>Lista mock</span>
-                <h2>{group.title}</h2>
-              </div>
-              <Badge>{group.items.length} items</Badge>
-            </div>
-            <ul className="check-list">
-              {group.items.map((item) => (
-                <li key={item}>
-                  <span aria-hidden="true" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </Card>
+      <FilterChipGroup
+        label="Vista"
+        onChange={setLane}
+        options={[
+          { label: "Hoy", value: "today" },
+          { label: "Proximas", value: "upcoming" },
+          { label: "En curso", value: "in_progress" },
+          { label: "Completadas mock", value: "done" },
+        ]}
+        value={lane}
+      />
+
+      <SectionHeader
+        action={<Badge tone="info">{visibleTasks.length} visibles</Badge>}
+        description="Los estados son estaticos para evitar confundir demo con gestion real."
+        title="Cola de ejecucion"
+      />
+
+      <section className="task-list">
+        {visibleTasks.map((task) => (
+          <TaskRow key={task.id} task={task} />
         ))}
       </section>
-
-      <EmptyState
-        badge="Sin persistencia"
-        description="Los datos son locales de ejemplo. La captura y sincronización de tareas queda fuera de Sprint 1."
-        title="Tareas reales en fase posterior"
-      />
     </div>
   );
 }

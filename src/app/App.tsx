@@ -4,6 +4,7 @@ import { RequireAuth } from "../auth/RequireAuth";
 import { AppShell } from "../components/layout/AppShell";
 import { LoginPage } from "../pages/LoginPage";
 import type { PageKey } from "../types/common";
+import { AUTH_ENABLED } from "../../shared/auth-config";
 import { getRouteByKey, getRouteByPath } from "./routes";
 
 function useCurrentPath() {
@@ -25,6 +26,14 @@ function AppRoutes() {
   const currentPath = useCurrentPath();
   const activeRoute = useMemo(() => getRouteByPath(currentPath), [currentPath]);
   const ActivePage = activeRoute.component;
+  const isLoginPath = currentPath === "/login" || currentPath === "/login/";
+
+  useEffect(() => {
+    if (!AUTH_ENABLED && isLoginPath) {
+      window.history.replaceState({}, "", "/");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }
+  }, [isLoginPath]);
 
   function handleNavigate(page: PageKey) {
     const route = getRouteByKey(page);
@@ -32,7 +41,7 @@ function AppRoutes() {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
-  if (currentPath === "/login" || currentPath === "/login/") {
+  if (AUTH_ENABLED && isLoginPath) {
     return <LoginPage />;
   }
 

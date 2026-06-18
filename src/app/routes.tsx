@@ -16,8 +16,8 @@ export const routes: RouteDefinition[] = [
     title: "Centro de mando",
     eyebrow: "Dashboard",
     description:
-      "Vista inicial para orientar prioridades, proyectos, memoria y decisiones sin depender todavía de backend.",
-    component: DashboardPage
+      "Vista inicial para orientar prioridades, proyectos, memoria y decisiones con datos mock locales.",
+    component: DashboardPage,
   },
   {
     key: "chat",
@@ -25,8 +25,8 @@ export const routes: RouteDefinition[] = [
     title: "Chat JARVIS",
     eyebrow: "Modulo conversacional",
     description:
-      "Entrada futura para conversar con JARVIS. En este sprint no hay conexión a modelos ni llamadas externas.",
-    component: ChatPage
+      "Canal de trabajo futuro con JARVIS. En este sprint no hay IA conectada ni llamadas externas.",
+    component: ChatPage,
   },
   {
     key: "memory",
@@ -34,8 +34,8 @@ export const routes: RouteDefinition[] = [
     title: "Memoria",
     eyebrow: "Reactor arc",
     description:
-      "Núcleo editable futuro para conocimiento personal, contexto, reglas y enlaces entre ideas.",
-    component: MemoryPage
+      "Nucleo editable futuro para conocimiento, contexto, reglas y enlaces entre ideas.",
+    component: MemoryPage,
   },
   {
     key: "projects",
@@ -43,17 +43,17 @@ export const routes: RouteDefinition[] = [
     title: "Proyectos",
     eyebrow: "Frentes activos",
     description:
-      "Mapa inicial de proyectos y resultados esperados, preparado para datos reales en el siguiente sprint.",
-    component: ProjectsPage
+      "Mapa mock de proyectos, avances, riesgos y proximos pasos sin conexion a datos reales.",
+    component: ProjectsPage,
   },
   {
     key: "tasks",
     path: "/tasks",
     title: "Tareas",
-    eyebrow: "Ejecución",
+    eyebrow: "Ejecucion",
     description:
-      "Bandeja placeholder para tareas y próximas acciones, sin persistencia ni automatizaciones.",
-    component: TasksPage
+      "Bandeja visual para prioridades, estados y proximas acciones sin persistencia.",
+    component: TasksPage,
   },
   {
     key: "decisions",
@@ -62,7 +62,7 @@ export const routes: RouteDefinition[] = [
     eyebrow: "Criterio",
     description:
       "Registro futuro de decisiones, motivos, opciones descartadas y consecuencias observadas.",
-    component: DecisionsPage
+    component: DecisionsPage,
   },
   {
     key: "persons",
@@ -71,16 +71,16 @@ export const routes: RouteDefinition[] = [
     eyebrow: "Relaciones",
     description:
       "Directorio manual para personas relevantes y contexto relacional, sin integraciones externas.",
-    component: PersonsPage
+    component: PersonsPage,
   },
   {
     key: "reminders",
     path: "/reminders",
     title: "Recordatorios",
-    eyebrow: "Señales",
+    eyebrow: "Senales",
     description:
-      "Recordatorios simples previstos para fases posteriores. Nada se programa ni se envía todavía.",
-    component: RemindersPage
+      "Recordatorios simples de demostracion. Nada se programa ni se envia todavia.",
+    component: RemindersPage,
   },
   {
     key: "settings",
@@ -88,9 +88,9 @@ export const routes: RouteDefinition[] = [
     title: "Ajustes",
     eyebrow: "Sistema",
     description:
-      "Configuración futura de modelo IA, exportación JSON y preferencias privadas de JARVIS.",
-    component: SettingsPage
-  }
+      "Configuracion futura de modelo IA, exportacion JSON y preferencias privadas de JARVIS.",
+    component: SettingsPage,
+  },
 ];
 
 export function getRouteByKey(key: RouteDefinition["key"]) {

@@ -1,40 +1,49 @@
+import { useMemo, useState } from "react";
+import { DecisionRow } from "../components/decisions/DecisionRow";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
-import { Card } from "../components/ui/Card";
+import { FilterChipGroup } from "../components/ui/FilterChipGroup";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { decisions } from "../data/mockJarvisData";
+import type { DecisionStatus } from "../types/jarvis";
 
-const decisions = [
-  {
-    title: "Dashboard primero",
-    reason: "JARVIS debe sentirse como sistema operativo personal, no como chatbot genérico."
-  },
-  {
-    title: "Sin router externo por ahora",
-    reason: "El estado local cubre la navegación inicial con menos complejidad."
-  },
-  {
-    title: "CSS propio",
-    reason: "Reduce dependencias y mantiene el lenguaje visual bajo control."
-  }
-];
+type DecisionFilter = "all" | DecisionStatus;
 
 export function DecisionsPage() {
+  const [status, setStatus] = useState<DecisionFilter>("all");
+  const visibleDecisions = useMemo(
+    () => decisions.filter((decision) => status === "all" || decision.status === status),
+    [status],
+  );
+
   return (
     <div className="page-stack">
       <PageHeader
-        description="Espacio para registrar decisiones, motivos y aprendizajes. Por ahora solo muestra estructura."
-        eyebrow="Criterio"
+        description="Decisiones como activos de conocimiento: motivo, impacto, proyecto y siguiente revision."
+        eyebrow="Registro navegable"
         title="Decisiones"
       />
 
+      <FilterChipGroup
+        label="Estado"
+        onChange={setStatus}
+        options={[
+          { label: "Todas", value: "all" },
+          { label: "Activas", value: "active" },
+          { label: "Revision", value: "needs_review" },
+          { label: "Superadas", value: "superseded" },
+        ]}
+        value={status}
+      />
+
+      <SectionHeader
+        action={<Badge>{visibleDecisions.length} registros</Badge>}
+        title="Criterio reutilizable"
+      />
+
       <section className="decision-list">
-        {decisions.map((decision) => (
-          <Card className="decision-item" key={decision.title}>
-            <div>
-              <Badge tone="info">Decision mock</Badge>
-              <h2>{decision.title}</h2>
-            </div>
-            <p>{decision.reason}</p>
-          </Card>
+        {visibleDecisions.map((decision) => (
+          <DecisionRow decision={decision} key={decision.id} />
         ))}
       </section>
     </div>

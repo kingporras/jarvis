@@ -1,52 +1,84 @@
+import { useMemo, useState } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
+import { ProjectSummaryCard } from "../components/projects/ProjectSummaryCard";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
-import { EmptyState } from "../components/ui/EmptyState";
-
-const projectRows = [
-  { area: "JARVIS Core", next: "Cerrar chasis frontend", state: "En curso" },
-  { area: "Backend mínimo", next: "Workers + D1 en Sprint 2", state: "Planificado" },
-  { area: "Memoria", next: "Modelo de datos inicial", state: "Pendiente" }
-];
+import { DemoNotice } from "../components/ui/DemoNotice";
+import { PriorityBadge } from "../components/ui/PriorityBadge";
+import { ProgressBar } from "../components/ui/ProgressBar";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { StatusBadge } from "../components/ui/StatusBadge";
+import { projects } from "../data/mockJarvisData";
 
 export function ProjectsPage() {
+  const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id ?? "");
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
+    [selectedProjectId],
+  );
+
   return (
     <div className="page-stack">
       <PageHeader
-        description="Vista placeholder para orientar frentes activos, estados y próximos resultados."
-        eyebrow="Frentes activos"
+        description="Proyectos como unidades de ejecucion con contexto, no solo como una lista."
+        eyebrow="Mock local"
         title="Proyectos"
       />
 
-      <Card className="panel">
-        <div className="panel__header">
-          <div>
-            <span>Mapa manual</span>
-            <h2>Gestión de proyectos</h2>
-          </div>
-          <Badge tone="info">Mock local</Badge>
-        </div>
-        <div className="data-table" role="table" aria-label="Proyectos de ejemplo">
-          <div className="data-table__row data-table__row--head" role="row">
-            <span role="columnheader">Proyecto</span>
-            <span role="columnheader">Siguiente resultado</span>
-            <span role="columnheader">Estado</span>
-          </div>
-          {projectRows.map((row) => (
-            <div className="data-table__row" role="row" key={row.area}>
-              <span role="cell">{row.area}</span>
-              <span role="cell">{row.next}</span>
-              <span role="cell">{row.state}</span>
-            </div>
+      <section className="summary-strip" aria-label="Resumen de proyectos">
+        <Badge tone="info">{projects.length} proyectos visibles</Badge>
+        <Badge tone="warning">1 prioridad P0</Badge>
+        <Badge>1 proyecto en espera</Badge>
+      </section>
+
+      <section className="project-workspace">
+        <div className="project-selector">
+          {projects.map((project) => (
+            <ProjectSummaryCard
+              isSelected={selectedProject?.id === project.id}
+              key={project.id}
+              onSelect={() => setSelectedProjectId(project.id)}
+              project={project}
+            />
           ))}
         </div>
-      </Card>
 
-      <EmptyState
-        badge="Futuro CRUD"
-        description="Cuando exista backend, esta sección podrá crear, actualizar y cerrar proyectos reales."
-        title="Gestión real pendiente"
-      />
+        {selectedProject ? (
+          <Card className="project-detail-panel">
+            <SectionHeader
+              action={<PriorityBadge priority={selectedProject.priority} />}
+              description={selectedProject.objective}
+              eyebrow="Detalle mock"
+              title={selectedProject.name}
+            />
+            <div className="badge-row">
+              <StatusBadge status={selectedProject.status} />
+              <Badge tone="info">{selectedProject.phase}</Badge>
+              <span>{selectedProject.updatedAt}</span>
+            </div>
+            <ProgressBar value={selectedProject.progress} />
+            <div className="detail-grid">
+              <article>
+                <span>Proximo paso</span>
+                <strong>{selectedProject.nextAction}</strong>
+              </article>
+              <article>
+                <span>Tareas asociadas</span>
+                <strong>{selectedProject.taskCount}</strong>
+              </article>
+              <article>
+                <span>Decisiones relacionadas</span>
+                <strong>{selectedProject.decisionCount}</strong>
+              </article>
+              <article>
+                <span>Riesgo</span>
+                <strong>{selectedProject.risk}</strong>
+              </article>
+            </div>
+            <DemoNotice>Memoria vinculada: {selectedProject.linkedMemory}</DemoNotice>
+          </Card>
+        ) : null}
+      </section>
     </div>
   );
 }

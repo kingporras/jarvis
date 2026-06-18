@@ -3,14 +3,17 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { EmptyState } from "../components/ui/EmptyState";
+import { DemoNotice } from "../components/ui/DemoNotice";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { nextSprintRecommendation } from "../data/mockJarvisData";
 import { AUTH_ENABLED } from "../../shared/auth-config";
 
 const settings = [
-  { label: "Modelo IA futuro", value: "No configurado" },
-  { label: "Exportación JSON", value: "Planificada" },
+  { label: "Modo de datos", value: "Mock local" },
+  { label: "Modelo IA", value: "No conectado" },
+  { label: "Exportacion JSON", value: "Planificada" },
   { label: "Tema visual", value: "Oscuro privado" },
-  { label: "Backend", value: "Pendiente Sprint 2" }
+  { label: "Backend", value: "Protegido, sin uso desde frontend" },
 ];
 
 export function SettingsPage() {
@@ -31,13 +34,11 @@ export function SettingsPage() {
       />
 
       <Card className="panel">
-        <div className="panel__header">
-          <div>
-          <span>Configuración inicial</span>
-            <h2>Base preparada</h2>
-          </div>
-          <Badge tone="success">Local</Badge>
-        </div>
+        <SectionHeader
+          action={<Badge tone="success">Local</Badge>}
+          eyebrow="Configuracion inicial"
+          title="Base preparada"
+        />
         <div className="settings-list">
           {settings.map((setting) => (
             <div className="settings-row" key={setting.label}>
@@ -46,6 +47,19 @@ export function SettingsPage() {
             </div>
           ))}
         </div>
+      </Card>
+
+      <Card className="panel">
+        <SectionHeader
+          action={<Badge tone="warning">Antes de datos reales</Badge>}
+          eyebrow="Siguiente fase"
+          title={nextSprintRecommendation.title}
+        />
+        <ul className="quiet-list">
+          {nextSprintRecommendation.steps.map((step) => (
+            <li key={step}>{step}</li>
+          ))}
+        </ul>
       </Card>
 
       {AUTH_ENABLED ? (
@@ -62,11 +76,10 @@ export function SettingsPage() {
         </Card>
       ) : null}
 
-      <EmptyState
-        badge="Exportación futura"
-        description="La exportación JSON y la selección de modelo se implementarán cuando existan datos y backend reales."
-        title="Sin configuración sensible"
-      />
+      <DemoNotice>
+        Mientras AUTH_ENABLED siga false, no se deben introducir datos personales, tareas reales,
+        proyectos reales, decisiones reales, secretos ni integraciones.
+      </DemoNotice>
     </div>
   );
 }

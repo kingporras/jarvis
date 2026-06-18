@@ -1,110 +1,145 @@
 import { PageHeader } from "../components/layout/PageHeader";
+import { QuickActionGrid } from "../components/dashboard/QuickActionGrid";
+import { MemoryCard } from "../components/memory/MemoryCard";
+import { ProjectSummaryCard } from "../components/projects/ProjectSummaryCard";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { StatCard } from "../components/ui/StatCard";
+import { DemoNotice } from "../components/ui/DemoNotice";
+import { PriorityBadge } from "../components/ui/PriorityBadge";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import {
+  dailyFocus,
+  dailyMetrics,
+  jarvisRecommendation,
+  memories,
+  projects,
+  quickActions,
+  reminders,
+} from "../data/mockJarvisData";
 
-const priorities = [
-  "Definir el mapa inicial de memoria editable",
-  "Cerrar el alcance visual de Sprint 1",
-  "Preparar el despliegue estático en Cloudflare Pages"
-];
+function formatToday() {
+  return new Intl.DateTimeFormat("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
+}
 
-const activeProjects = [
-  { name: "JARVIS Core", status: "Base PWA", tone: "info" as const },
-  { name: "Memoria personal", status: "Sprint 2", tone: "warning" as const },
-  { name: "Decisiones", status: "Pendiente", tone: "neutral" as const }
-];
-
-const recentMemories = [
-  "JARVIS debe abrir como centro de mando, no como chat.",
-  "La memoria editable será el núcleo del producto.",
-  "Sprint 1 no incluye backend ni persistencia real."
-];
-
-const recentDecisions = [
-  "Usar CSS normal con variables.",
-  "Evitar estado global hasta que haya datos reales.",
-  "Mantener el Dashboard como primera experiencia."
-];
+function navigateTo(route: string) {
+  window.history.pushState({}, "", route);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
 
 export function DashboardPage() {
+  const activeProjects = projects.filter((project) => project.status !== "completed");
+  const recentMemories = memories.slice(0, 4);
+
   return (
-    <div className="page-stack">
+    <div className="page-stack command-center">
       <PageHeader
-        description="Una primera vista para ordenar el día: prioridades, proyectos, memoria y decisiones en un solo plano."
-        eyebrow="Dashboard"
-        title="Centro de mando personal"
+        description="Un plano operativo para leer prioridades, contexto y proximos pasos sin conectar datos reales."
+        eyebrow={dailyFocus.mode}
+        title={dailyFocus.greeting}
       />
 
-      <section className="stats-grid" aria-label="Resumen inicial">
-        <StatCard detail="mock" label="Prioridades" tone="warning" value="3" />
-        <StatCard detail="mock" label="Proyectos activos" tone="info" value="3" />
-        <StatCard detail="mock" label="Memorias recientes" tone="success" value="3" />
-        <StatCard detail="mock" label="Decisiones recientes" value="3" />
+      <section className="dashboard-hero-grid">
+        <Card className="next-action-card" tone="accent">
+          <div className="next-action-card__header">
+            <div>
+              <span>Siguiente mejor accion</span>
+              <h2>{dailyFocus.headline}</h2>
+            </div>
+            <PriorityBadge priority="P0" />
+          </div>
+          <p>{dailyFocus.context}</p>
+          <div className="next-action-card__project">
+            <span>Proyecto vinculado</span>
+            <strong>{dailyFocus.linkedProject}</strong>
+          </div>
+          <div className="action-row">
+            <Button onClick={() => navigateTo("/projects")} variant="primary">
+              Abrir proyecto
+            </Button>
+            <Button onClick={() => navigateTo("/tasks")} variant="secondary">
+              Ver tareas
+            </Button>
+          </div>
+          <small>{dailyFocus.note}</small>
+        </Card>
+
+        <Card className="today-card">
+          <SectionHeader
+            description={formatToday()}
+            eyebrow="Resumen de hoy"
+            title="Lectura rapida"
+          />
+          <div className="today-card__metrics">
+            {dailyMetrics.map((metric) => (
+              <article className="metric-tile" key={metric.label}>
+                <span>{metric.label}</span>
+                <strong>{metric.value}</strong>
+                <Badge tone={metric.tone}>{metric.detail}</Badge>
+              </article>
+            ))}
+          </div>
+        </Card>
       </section>
 
-      <section className="dashboard-grid">
-        <Card className="panel panel--priority" tone="accent">
-          <div className="panel__header">
-            <div>
-              <span>Foco</span>
-              <h2>Prioridades de hoy</h2>
-            </div>
-            <Badge tone="warning">Manual</Badge>
-          </div>
-          <ol className="priority-list">
-            {priorities.map((priority) => (
-              <li key={priority}>{priority}</li>
-            ))}
-          </ol>
-        </Card>
-
-        <Card className="panel">
-          <div className="panel__header">
-            <div>
-              <span>Ejecucion</span>
-              <h2>Proyectos activos</h2>
-            </div>
-            <Badge tone="info">Vista mock</Badge>
-          </div>
-          <div className="project-list">
+      <section className="dashboard-grid dashboard-grid--weighted">
+        <Card className="panel dashboard-grid__wide">
+          <SectionHeader
+            action={<Badge tone="info">{activeProjects.length} visibles</Badge>}
+            description="Frentes con siguiente accion, progreso y riesgo explicito."
+            eyebrow="Ejecucion"
+            title="Proyectos activos"
+          />
+          <div className="project-card-grid">
             {activeProjects.map((project) => (
-              <div className="project-row" key={project.name}>
-                <span>{project.name}</span>
-                <Badge tone={project.tone}>{project.status}</Badge>
-              </div>
+              <ProjectSummaryCard key={project.id} project={project} />
             ))}
           </div>
         </Card>
 
-        <Card className="panel">
-          <div className="panel__header">
-            <div>
-              <span>Contexto</span>
-              <h2>Memorias recientes</h2>
-            </div>
-            <Badge tone="success">Reactor arc</Badge>
-          </div>
-          <ul className="quiet-list">
+        <Card className="panel recommendation-card">
+          <SectionHeader eyebrow="Futura IA" title={jarvisRecommendation.title} />
+          <p>{jarvisRecommendation.text}</p>
+          <DemoNotice>{jarvisRecommendation.notice}</DemoNotice>
+        </Card>
+
+        <Card className="panel dashboard-grid__wide">
+          <SectionHeader
+            description="Fragmentos de contexto que despues alimentaran memoria, decisiones y chat."
+            eyebrow="Reactor arc"
+            title="Memoria reciente"
+          />
+          <div className="memory-card-grid memory-card-grid--compact">
             {recentMemories.map((memory) => (
-              <li key={memory}>{memory}</li>
+              <MemoryCard key={memory.id} memory={memory} />
             ))}
-          </ul>
+          </div>
         </Card>
 
         <Card className="panel">
-          <div className="panel__header">
-            <div>
-              <span>Criterio</span>
-              <h2>Decisiones recientes</h2>
-            </div>
-            <Badge>Registro</Badge>
-          </div>
-          <ul className="quiet-list">
-            {recentDecisions.map((decision) => (
-              <li key={decision}>{decision}</li>
+          <SectionHeader eyebrow="Accesos rapidos" title="Operaciones visuales" />
+          <QuickActionGrid actions={quickActions} />
+        </Card>
+
+        <Card className="panel">
+          <SectionHeader
+            action={<Badge tone="warning">Sin calendario</Badge>}
+            eyebrow="Senales"
+            title="Recordatorios proximos"
+          />
+          <div className="compact-list">
+            {reminders.slice(0, 2).map((reminder) => (
+              <article key={reminder.id}>
+                <span>{reminder.timeLabel}</span>
+                <strong>{reminder.title}</strong>
+                <p>{reminder.context}</p>
+              </article>
             ))}
-          </ul>
+          </div>
         </Card>
       </section>
     </div>

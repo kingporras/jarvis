@@ -1,43 +1,46 @@
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Card } from "../components/ui/Card";
-import { EmptyState } from "../components/ui/EmptyState";
-
-const reminderIdeas = [
-  "Revisar prioridades al empezar el día.",
-  "Cerrar decisiones abiertas al final de la semana.",
-  "Actualizar memoria tras hitos importantes."
-];
+import { DemoNotice } from "../components/ui/DemoNotice";
+import { PriorityBadge } from "../components/ui/PriorityBadge";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { StatusBadge } from "../components/ui/StatusBadge";
+import { reminders } from "../data/mockJarvisData";
 
 export function RemindersPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        description="Recordatorios simples previstos para evolucionar con backend. No hay notificaciones reales todavía."
-        eyebrow="Señales"
+        description="Compromisos de ejemplo sin calendario, notificaciones ni jobs programados."
+        eyebrow="Senales simples"
         title="Recordatorios"
       />
 
-      <Card className="panel">
-        <div className="panel__header">
-          <div>
-            <span>Borrador</span>
-            <h2>Recordatorios simples</h2>
-          </div>
-          <Badge tone="warning">No programado</Badge>
-        </div>
-        <ul className="quiet-list">
-          {reminderIdeas.map((idea) => (
-            <li key={idea}>{idea}</li>
-          ))}
-        </ul>
-      </Card>
-
-      <EmptyState
-        badge="Sin automatizaciones"
-        description="Sprint 1 no envía avisos, no crea jobs y no programa tareas en servicios externos."
-        title="Motor de avisos pendiente"
+      <SectionHeader
+        action={<Badge tone="warning">Sin automatizaciones</Badge>}
+        description="Recordatorios mock para mostrar prioridad, contexto y estado."
+        title="Proximas senales"
       />
+
+      <section className="reminder-list">
+        {reminders.map((reminder) => (
+          <Card className="reminder-card" key={reminder.id}>
+            <div>
+              <span>{reminder.timeLabel}</span>
+              <h2>{reminder.title}</h2>
+              <p>{reminder.context}</p>
+            </div>
+            <div className="badge-row">
+              <PriorityBadge priority={reminder.priority} />
+              <StatusBadge status={reminder.status} />
+            </div>
+          </Card>
+        ))}
+      </section>
+
+      <DemoNotice>
+        Nada se programa, envia o sincroniza. Este modulo solo representa la experiencia futura.
+      </DemoNotice>
     </div>
   );
 }

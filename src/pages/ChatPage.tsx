@@ -1,57 +1,107 @@
+import { useState } from "react";
+import { ChatMessage } from "../components/chat/ChatMessage";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
-import { EmptyState } from "../components/ui/EmptyState";
-
-const messages = [
-  {
-    author: "Victor",
-    text: "Cuando llegue Sprint 2, quiero preguntarte por proyectos, memoria y decisiones."
-  },
-  {
-    author: "JARVIS",
-    text: "Recibido. En Sprint 1 solo preparo la interfaz; no hay modelo IA conectado."
-  }
-];
+import { DemoNotice } from "../components/ui/DemoNotice";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import {
+  chatMessages,
+  dailyFocus,
+  projects,
+  suggestedPrompts,
+  tasks,
+} from "../data/mockJarvisData";
 
 export function ChatPage() {
+  const [draft, setDraft] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
+  const topTasks = tasks.filter((task) => task.priority === "P0").slice(0, 2);
+
   return (
     <div className="page-stack">
       <PageHeader
-        description="El chat será una puerta de entrada, no el producto completo. La conexión a IA queda fuera de este sprint."
-        eyebrow="Modulo conversacional"
+        description="Contexto, prioridades y proximos pasos en un solo lugar. Vista estatica sin modelo conectado."
+        eyebrow="IA no conectada"
         title="Chat JARVIS"
       />
 
-      <Card className="chat-shell">
-        <div className="chat-shell__header">
-          <div>
-            <h2>Conversación futura</h2>
-            <p>Placeholder visual sin OpenAI API, sin agentes y sin backend.</p>
+      <section className="chat-workspace">
+        <Card className="chat-shell">
+          <div className="chat-shell__header">
+            <div>
+              <h2>Conversacion de ejemplo</h2>
+              <p>Canal ejecutivo futuro. Las respuestas no se generan en tiempo real.</p>
+            </div>
+            <Badge tone="warning">Demo</Badge>
           </div>
-          <Badge tone="warning">Desconectado</Badge>
-        </div>
 
-        <div className="message-list" aria-label="Mensajes de ejemplo">
-          {messages.map((message) => (
-            <article className="message" key={`${message.author}-${message.text}`}>
-              <strong>{message.author}</strong>
-              <p>{message.text}</p>
-            </article>
-          ))}
-        </div>
+          <div className="message-list" aria-label="Mensajes de ejemplo">
+            {chatMessages.map((message) => (
+              <ChatMessage key={message.id} message={message} />
+            ))}
+          </div>
 
-        <EmptyState
-          badge="Sprint 2"
-          description="Aquí se conectará el backend y el modelo cuando existan memoria, sesiones y conversaciones reales."
-          title="Entrada preparada, motor pendiente"
-        >
-          <Button disabled variant="primary">
-            Enviar deshabilitado
-          </Button>
-        </EmptyState>
-      </Card>
+          <div className="suggested-prompts" aria-label="Sugerencias locales">
+            {suggestedPrompts.map((prompt) => (
+              <button
+                aria-pressed={draft === prompt}
+                className={draft === prompt ? "filter-chip filter-chip--active" : "filter-chip"}
+                key={prompt}
+                onClick={() => {
+                  setDraft(prompt);
+                  setNotice("Sugerencia copiada al input local. No se ha enviado nada.");
+                }}
+                type="button"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          <div className="chat-input-row">
+            <input
+              aria-label="Mensaje de demostracion"
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="La IA real se conectara en un sprint posterior."
+              value={draft}
+            />
+            <Button
+              onClick={() => setNotice("Modo demo: ningun mensaje ha sido enviado.")}
+              variant="secondary"
+            >
+              Enviar
+            </Button>
+          </div>
+          {notice ? <DemoNotice>{notice}</DemoNotice> : null}
+        </Card>
+
+        <aside className="context-rail">
+          <Card className="panel">
+            <SectionHeader eyebrow="Contexto actual" title={dailyFocus.linkedProject} />
+            <p>{dailyFocus.context}</p>
+            <Badge tone="info">{projects[0]?.phase}</Badge>
+          </Card>
+
+          <Card className="panel">
+            <SectionHeader eyebrow="Prioridades" title="Hoy" />
+            <div className="compact-list">
+              {topTasks.map((task) => (
+                <article key={task.id}>
+                  <span>{task.priority}</span>
+                  <strong>{task.title}</strong>
+                  <p>{task.context}</p>
+                </article>
+              ))}
+            </div>
+          </Card>
+
+          <DemoNotice>
+            No hay OpenAI, agentes ni streaming. La conversacion es una maqueta local.
+          </DemoNotice>
+        </aside>
+      </section>
     </div>
   );
 }
