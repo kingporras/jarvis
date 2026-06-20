@@ -125,7 +125,8 @@ button {
 
 .nav-item:focus-visible,
 .mobile-nav__item:focus-visible,
-.button:focus-visible {
+.button:focus-visible,
+.voice-future-button:focus-visible {
   box-shadow: 0 0 0 3px rgba(99, 214, 197, 0.24);
 }
 
@@ -368,6 +369,7 @@ button {
 
 .dashboard-hero-grid {
   display: grid;
+  align-items: start;
   grid-template-columns: minmax(0, 8fr) minmax(20rem, 4fr);
   gap: var(--space-4);
 }
@@ -464,6 +466,10 @@ button {
   align-content: start;
   gap: var(--space-4);
   padding: var(--space-5);
+}
+
+.today-row {
+  min-width: 0;
 }
 
 .today-card__metrics,
@@ -621,6 +627,231 @@ button.project-summary-card {
 .demo-notice p {
   margin: 0;
   color: var(--color-text-soft);
+}
+
+.system-status-card {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.system-status-card__core {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+}
+
+.system-status-card__summary {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.system-status-card__summary div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(5, 6, 8, 0.2);
+  padding: var(--space-3);
+}
+
+.system-status-card__summary div:first-child,
+.system-status-card__summary div:last-child {
+  grid-column: 1 / -1;
+}
+
+.system-status-card__summary span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.system-status-card__summary strong {
+  min-width: 0;
+  color: var(--color-text-soft);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.arc-core {
+  --arc-core-color: var(--color-amber);
+  --arc-core-soft: rgba(228, 189, 115, 0.12);
+  display: grid;
+  width: min(100%, 12.75rem);
+  gap: var(--space-2);
+  justify-items: center;
+  color: var(--arc-core-color);
+}
+
+.arc-core--idle {
+  --arc-core-color: rgba(228, 189, 115, 0.72);
+}
+
+.arc-core--focus {
+  --arc-core-color: var(--color-amber);
+}
+
+.arc-core--active {
+  --arc-core-color: var(--color-accent);
+}
+
+.arc-core--blocked {
+  --arc-core-color: #f08c7c;
+}
+
+.arc-core--calm {
+  --arc-core-color: rgba(155, 207, 159, 0.82);
+}
+
+.arc-core svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 12.75rem;
+  overflow: visible;
+  filter: drop-shadow(0 0 18px rgba(228, 189, 115, 0.12));
+}
+
+.arc-core__ring,
+.arc-core__radials,
+.arc-core__points,
+.arc-core__center {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.arc-core__ring {
+  stroke-width: 1.25;
+}
+
+.arc-core__ring--outer {
+  opacity: 0.58;
+  stroke-dasharray: 72 28;
+  transform-origin: 110px 110px;
+  animation: arc-core-rotate 34s linear infinite;
+}
+
+.arc-core__ring--middle {
+  opacity: 0.72;
+  stroke-dasharray: 54 46;
+  transform-origin: 110px 110px;
+  animation: arc-core-rotate-reverse 48s linear infinite;
+}
+
+.arc-core__ring--inner {
+  opacity: 0.9;
+  stroke-dasharray: 64 36;
+}
+
+.arc-core--idle .arc-core__ring--outer,
+.arc-core--calm .arc-core__ring--outer {
+  animation-duration: 58s;
+  opacity: 0.42;
+}
+
+.arc-core--focus .arc-core__ring--middle {
+  animation-duration: 32s;
+}
+
+.arc-core--active .arc-core__ring--outer {
+  animation-duration: 28s;
+}
+
+.arc-core--blocked .arc-core__ring--inner {
+  stroke: #f08c7c;
+}
+
+.arc-core__radials {
+  opacity: 0.32;
+  stroke-width: 1;
+}
+
+.arc-core__points {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.78;
+  transform-origin: 110px 110px;
+  animation: arc-core-rotate 70s linear infinite;
+}
+
+.arc-core__center {
+  fill: rgba(228, 189, 115, 0.08);
+  transform-origin: 110px 110px;
+}
+
+.arc-core__center--outer {
+  stroke-width: 1.2;
+  animation: arc-core-pulse 4.6s ease-in-out infinite;
+}
+
+.arc-core__center--middle {
+  fill: rgba(228, 189, 115, 0.12);
+  stroke-width: 1.1;
+}
+
+.arc-core__center--core {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.86;
+}
+
+.arc-core__caption {
+  color: var(--color-text-soft);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.voice-future-button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border: 1px solid rgba(228, 189, 115, 0.3);
+  border-radius: var(--radius-md);
+  background: var(--color-amber-soft);
+  color: var(--color-amber);
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 780;
+  padding: 0.65rem 0.9rem;
+}
+
+.voice-future-button span {
+  display: block;
+  width: 0.72rem;
+  height: 0.72rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(228, 189, 115, 0.1);
+}
+
+.voice-future-message {
+  min-height: 1.25rem;
+  margin: calc(var(--space-2) * -1) 0 0;
+  color: var(--color-text-soft);
+  font-size: 0.82rem;
+}
+
+.voice-future-message:empty {
+  display: none;
+}
+
+.system-status-card__note {
+  margin: 0;
+  border: 1px dashed rgba(228, 189, 115, 0.24);
+  border-radius: var(--radius-md);
+  background: rgba(228, 189, 115, 0.07);
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: var(--space-3);
 }
 
 .quick-actions {
@@ -1195,7 +1426,40 @@ button.project-summary-card {
   *,
   *::before,
   *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .arc-core__ring,
+  .arc-core__points,
+  .arc-core__center {
+    animation: none !important;
+  }
+}
+
+@keyframes arc-core-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes arc-core-rotate-reverse {
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
+@keyframes arc-core-pulse {
+  0%,
+  100% {
+    opacity: 0.68;
+    transform: scale(0.98);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
   }
 }

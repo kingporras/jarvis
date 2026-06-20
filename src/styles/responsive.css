@@ -20,6 +20,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .today-card__metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
   .decision-row__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -226,11 +230,15 @@
   }
 
   .chat-input-row,
-  .today-card__metrics,
   .detail-grid,
   .decision-row__grid,
   .quick-actions__grid {
     grid-template-columns: 1fr;
+  }
+
+  .today-card__metrics,
+  .system-status-card__summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .data-table {
@@ -273,6 +281,18 @@
     font-size: 2.15rem;
   }
 
+  .system-status-card {
+    gap: var(--space-3);
+  }
+
+  .arc-core {
+    width: min(100%, 11.75rem);
+  }
+
+  .arc-core svg {
+    max-width: 11.75rem;
+  }
+
   .panel,
   .chat-shell,
   .empty-state,
@@ -309,5 +329,39 @@
 
   .filter-chip {
     width: 100%;
+  }
+}
+
+@media (max-width: 340px) {
+  .page-header h1 {
+    font-size: 1.75rem;
+    overflow-wrap: break-word;
+  }
+
+  .next-action-card {
+    padding: var(--space-4);
+  }
+
+  .next-action-card h2 {
+    font-size: 1.82rem;
+    line-height: 1.04;
+    overflow-wrap: break-word;
+  }
+
+  .next-action-card p {
+    font-size: 0.98rem;
+  }
+
+  .today-card__metrics,
+  .system-status-card__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .arc-core {
+    width: min(100%, 10.25rem);
+  }
+
+  .arc-core svg {
+    max-width: 10.25rem;
   }
 }

@@ -16,6 +16,7 @@ export type MemoryType =
 export type MemoryStatus = "active" | "needs_review" | "archived" | "temporal";
 export type TaskLane = "today" | "upcoming" | "in_progress" | "done";
 export type ChatAuthor = "Victor" | "JARVIS";
+export type ArcCoreState = "idle" | "focus" | "active" | "blocked" | "calm";
 
 export interface DailyMetric {
   label: string;
@@ -104,4 +105,15 @@ export interface ChatMessage {
   id: string;
   author: ChatAuthor;
   text: string;
+}
+
+export interface SystemStatus {
+  state: ArcCoreState;
+  general: string;
+  focus: string;
+  priority: Priority;
+  activity: string;
+  security: string;
+  memory: string;
+  note: string;
 }

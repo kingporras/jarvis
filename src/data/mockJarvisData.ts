@@ -8,6 +8,7 @@ import type {
   JarvisReminder,
   JarvisTask,
   QuickAction,
+  SystemStatus,
 } from "../types/jarvis";
 
 /**
@@ -31,6 +32,17 @@ export const dailyMetrics: DailyMetric[] = [
   { label: "Recordatorios", value: "2", detail: "proximos", tone: "success" },
   { label: "Decision pendiente", value: "1", detail: "revision", tone: "neutral" },
 ];
+
+export const systemStatus: SystemStatus = {
+  state: "focus",
+  general: "Estable",
+  focus: "Command Center UX",
+  priority: "P0",
+  activity: "3 frentes activos",
+  security: "Modo demo",
+  memory: "Preparada, aun no conectada",
+  note: "Indicadores visuales de demostracion. No representan actividad en tiempo real.",
+};
 
 export const jarvisRecommendation = {
   title: "JARVIS recomienda",

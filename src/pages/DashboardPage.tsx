@@ -1,5 +1,6 @@
 import { PageHeader } from "../components/layout/PageHeader";
 import { QuickActionGrid } from "../components/dashboard/QuickActionGrid";
+import { SystemStatusCard } from "../components/dashboard/SystemStatusCard";
 import { MemoryCard } from "../components/memory/MemoryCard";
 import { ProjectSummaryCard } from "../components/projects/ProjectSummaryCard";
 import { Badge } from "../components/ui/Badge";
@@ -16,6 +17,7 @@ import {
   projects,
   quickActions,
   reminders,
+  systemStatus,
 } from "../data/mockJarvisData";
 
 function formatToday() {
@@ -68,12 +70,12 @@ export function DashboardPage() {
           <small>{dailyFocus.note}</small>
         </Card>
 
+        <SystemStatusCard status={systemStatus} />
+      </section>
+
+      <section className="today-row" aria-label="Resumen de hoy">
         <Card className="today-card">
-          <SectionHeader
-            description={formatToday()}
-            eyebrow="Resumen de hoy"
-            title="Lectura rapida"
-          />
+          <SectionHeader description={formatToday()} eyebrow="Resumen de hoy" title="Lectura rapida" />
           <div className="today-card__metrics">
             {dailyMetrics.map((metric) => (
               <article className="metric-tile" key={metric.label}>
