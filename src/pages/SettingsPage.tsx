@@ -1,12 +1,9 @@
-import { useAuth } from "../auth/AuthProvider";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
-import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { DemoNotice } from "../components/ui/DemoNotice";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { nextSprintRecommendation } from "../data/mockJarvisData";
-import { AUTH_ENABLED } from "../../shared/auth-config";
 
 const settings = [
   { label: "Modo de datos", value: "Mock local" },
@@ -17,14 +14,6 @@ const settings = [
 ];
 
 export function SettingsPage() {
-  const { logout } = useAuth();
-
-  async function handleLogout() {
-    await logout();
-    window.history.replaceState({}, "", "/login");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  }
-
   return (
     <div className="page-stack">
       <PageHeader
@@ -62,23 +51,10 @@ export function SettingsPage() {
         </ul>
       </Card>
 
-      {AUTH_ENABLED ? (
-        <Card className="panel">
-          <div className="panel__header">
-            <div>
-              <span>Acceso privado</span>
-              <h2>Sesion de Victor</h2>
-            </div>
-            <Button onClick={handleLogout} variant="secondary">
-              Cerrar sesion
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
       <DemoNotice>
-        Mientras AUTH_ENABLED siga false, no se deben introducir datos personales, tareas reales,
-        proyectos reales, decisiones reales, secretos ni integraciones.
+        Cloudflare Access protege el acceso humano al sitio. El frontend sigue usando datos mock y
+        no debe introducir datos personales, tareas reales, proyectos reales, decisiones reales,
+        secretos ni integraciones todavia.
       </DemoNotice>
     </div>
   );

@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AuthProvider } from "../auth/AuthProvider";
-import { RequireAuth } from "../auth/RequireAuth";
 import { AppShell } from "../components/layout/AppShell";
-import { LoginPage } from "../pages/LoginPage";
 import type { PageKey } from "../types/common";
-import { AUTH_ENABLED } from "../../shared/auth-config";
 import { getRouteByKey, getRouteByPath } from "./routes";
 
 function useCurrentPath() {
@@ -29,7 +25,7 @@ function AppRoutes() {
   const isLoginPath = currentPath === "/login" || currentPath === "/login/";
 
   useEffect(() => {
-    if (!AUTH_ENABLED && isLoginPath) {
+    if (isLoginPath) {
       window.history.replaceState({}, "", "/");
       window.dispatchEvent(new PopStateEvent("popstate"));
     }
@@ -41,27 +37,17 @@ function AppRoutes() {
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
-  if (AUTH_ENABLED && isLoginPath) {
-    return <LoginPage />;
-  }
-
   return (
-    <RequireAuth>
-      <AppShell
-        activePage={activeRoute.key}
-        activeRoute={activeRoute}
-        onNavigate={handleNavigate}
-      >
-        <ActivePage />
-      </AppShell>
-    </RequireAuth>
+    <AppShell
+      activePage={activeRoute.key}
+      activeRoute={activeRoute}
+      onNavigate={handleNavigate}
+    >
+      <ActivePage />
+    </AppShell>
   );
 }
 
 export function App() {
-  return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
-  );
+  return <AppRoutes />;
 }

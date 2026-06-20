@@ -23,8 +23,8 @@ export function success<T>(data: T, init?: ResponseInit): Response {
   return json<ApiResponse<T>>({ ok: true, data }, init);
 }
 
-export function error(message: string, status = 400): Response {
-  return json<ApiResponse<never>>({ ok: false, error: message }, { status });
+export function error(message: string, status = 400, init: ResponseInit = {}): Response {
+  return json<ApiResponse<never>>({ ok: false, error: message }, { ...init, status });
 }
 
 export function notFound(): Response {

@@ -1,6 +1,4 @@
-import { getAuthenticatedUser } from "./lib/auth";
 import type { PagesContext } from "./lib/types";
-import { AUTH_ENABLED } from "../shared/auth-config";
 
 interface MiddlewareContext extends PagesContext {
   next: () => Promise<Response>;
@@ -22,15 +20,6 @@ function isStaticAsset(pathname: string): boolean {
   );
 }
 
-function redirectToLogin(request: Request): Response {
-  const url = new URL(request.url);
-  const nextPath = `${url.pathname}${url.search}`;
-  const loginUrl = new URL("/login", url.origin);
-  loginUrl.searchParams.set("next", nextPath);
-
-  return Response.redirect(loginUrl.toString(), 302);
-}
-
 export async function onRequest(context: MiddlewareContext): Promise<Response> {
   const url = new URL(context.request.url);
   const { pathname } = url;
@@ -39,17 +28,9 @@ export async function onRequest(context: MiddlewareContext): Promise<Response> {
     return context.next();
   }
 
-  if (!AUTH_ENABLED) {
-    return pathname === "/login" || pathname === "/login/"
-      ? Response.redirect(new URL("/", url.origin).toString(), 302)
-      : context.next();
-  }
-
-  const user = await getAuthenticatedUser(context.request, context.env).catch(() => null);
-
   if (pathname === "/login" || pathname === "/login/") {
-    return user ? Response.redirect(new URL("/", url.origin).toString(), 302) : context.next();
+    return Response.redirect(new URL("/", url.origin).toString(), 302);
   }
 
-  return user ? context.next() : redirectToLogin(context.request);
+  return context.next();
 }

@@ -49,21 +49,17 @@ Sprint 2 anade Cloudflare Pages Functions bajo `/api/*`, migraciones D1, seed de
 
 Guia completa: [docs/sprint-2-backend-d1.md](docs/sprint-2-backend-d1.md)
 
-## Sprint 3 - Auth privada
+## Sprint 5 - Cloudflare Access API boundary
 
-Sprint 3 anade login privado de usuario unico, sesiones opacas con cookie HttpOnly y hashes de sesion en D1.
+JARVIS usa Cloudflare Access como autenticacion humana principal para produccion y previews. Pages Functions validan el JWT de Access antes de permitir endpoints privados bajo `/api/*`.
 
-Guia completa: [docs/auth.md](docs/auth.md)
+Guia completa: [docs/cloudflare-access.md](docs/cloudflare-access.md)
 
-## Sprint 3A - Passwordless Demo Mode
-
-La autenticacion esta deshabilitada temporalmente para una fase publica de demo/desarrollo. Las rutas visuales de la PWA cargan sin login ni contrasena, pero esto no habilita APIs de datos ni escrituras publicas.
-
-- El interruptor compartido esta en `shared/auth-config.ts` como `AUTH_ENABLED = false`.
-- Mientras siga en `false`, no introduzcas datos personales, memoria real, tareas reales, proyectos reales, decisiones reales, secretos ni integraciones.
-- Las rutas visuales son publicas temporalmente, pero los endpoints de datos bajo `/api/*` siguen cerrados sin sesion y el frontend no se conecta a D1.
-- `sessions` y `migrations/0002_auth_sessions.sql` se conservan de forma intencional para reactivar auth mas adelante.
-- Antes de usar informacion sensible o integraciones, cambia `AUTH_ENABLED` a `true` y configura `JARVIS_AUTH_PASSWORD_HASH` como secreto en Cloudflare Pages.
+- `/api/health` sigue publico dentro de la API de JARVIS, aunque Cloudflare Access puede proteger el hostname desde Internet.
+- `/api/access/me` valida `Cf-Access-Jwt-Assertion` y devuelve solo identidad minima.
+- El frontend sigue usando datos mock locales y no se conecta a APIs reales.
+- La auth interna de login/password/sesiones queda retirada operacionalmente. Nota historica: [docs/auth.md](docs/auth.md)
+- No introduzcas datos personales, memoria real, tareas reales, proyectos reales, decisiones reales, secretos ni integraciones hasta que el boundary Access este validado en produccion y preview.
 
 ## Alcance de Sprint 1
 

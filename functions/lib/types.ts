@@ -18,12 +18,13 @@ export interface D1Database {
 }
 
 export interface Env {
+  CLOUDFLARE_ACCESS_AUDS?: string;
+  CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   DB?: D1Database;
-  JARVIS_AUTH_PASSWORD_HASH?: string;
-  JARVIS_SESSION_TTL_DAYS?: string;
 }
 
 export interface PagesContext {
+  data?: Record<string, unknown>;
   request: Request;
   env: Env;
   params: {

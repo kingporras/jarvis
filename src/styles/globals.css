@@ -5,6 +5,7 @@
 html {
   min-width: 320px;
   background: var(--color-bg);
+  overflow-x: hidden;
 }
 
 body {
@@ -17,6 +18,7 @@ body {
   color: var(--color-text);
   font-size: 16px;
   line-height: 1.5;
+  overflow-x: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
 }

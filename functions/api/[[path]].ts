@@ -1,8 +1,7 @@
-import { createSession, getAuthenticatedUser, nowIso, revokeSession, validatePassword } from "../lib/auth";
+import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
 import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
 import type { D1Database, D1Value, PagesContext } from "../lib/types";
-import { AUTH_ENABLED } from "../../shared/auth-config";
 
 interface Project {
   id: string;
@@ -117,6 +116,10 @@ const decisionColumns = [
 const priorityOrderSql =
   "CASE priority WHEN 'P0' THEN 0 WHEN 'P1' THEN 1 WHEN 'P2' THEN 2 WHEN 'P3' THEN 3 ELSE 4 END";
 
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
 function newId(prefix?: string): string {
   const id = crypto.randomUUID();
   return prefix ? `${prefix}_${id}` : id;
@@ -182,54 +185,44 @@ async function handleHealth(db: D1Database): Promise<Response> {
   });
 }
 
-async function handleLogin(context: PagesContext): Promise<Response> {
-  const payload = await readJson(context.request);
-  const password = requiredString(payload, "password");
-  const isValidPassword = await validatePassword(context.env, password);
-
-  if (!isValidPassword) {
-    return error("Invalid credentials", 401);
-  }
-
-  const session = await createSession(context.request, context.env);
-
-  return json(
-    {
-      ok: true,
-      user: session.user,
-    },
-    {
-      headers: {
-        "Set-Cookie": session.cookie,
-      },
-    },
-  );
+function noStoreHeaders(): HeadersInit {
+  return { "Cache-Control": "no-store" };
 }
 
-async function handleLogout(context: PagesContext): Promise<Response> {
-  const cookie = await revokeSession(context.request, context.env);
-
-  return json(
-    { ok: true },
-    {
-      headers: {
-        "Set-Cookie": cookie,
-      },
-    },
-  );
-}
-
-async function handleMe(context: PagesContext): Promise<Response> {
-  const user = await getAuthenticatedUser(context.request, context.env);
-
-  if (!user) {
-    return error("Unauthorized", 401);
-  }
-
-  return json({
-    ok: true,
-    user,
+function legacyAuthRetired(): Response {
+  return error("Authentication endpoint retired", 410, {
+    headers: noStoreHeaders(),
   });
+}
+
+async function getAccessIdentity(context: PagesContext): Promise<AccessIdentity> {
+  const identity = context.data?.accessIdentity;
+
+  if (isAccessIdentity(identity)) {
+    return identity;
+  }
+
+  return requireAccess(context.request, context.env);
+}
+
+async function handleAccessMe(context: PagesContext): Promise<Response> {
+  const identity = await getAccessIdentity(context);
+
+  return json(
+    identity.email
+      ? {
+          authenticated: true,
+          subject: identity.subject,
+          email: identity.email,
+        }
+      : {
+          authenticated: true,
+          subject: identity.subject,
+        },
+    {
+      headers: noStoreHeaders(),
+    },
+  );
 }
 
 async function handleDashboard(db: D1Database): Promise<Response> {
@@ -523,35 +516,26 @@ async function route(context: PagesContext): Promise<Response> {
     return json({ ok: true });
   }
 
-  if (!AUTH_ENABLED && path === "/auth/login" && method === "POST") {
-    return error("Authentication is disabled", 503);
+  if (path.startsWith("/auth/")) {
+    return legacyAuthRetired();
   }
 
-  if (!AUTH_ENABLED && path === "/auth/logout" && method === "POST") {
-    return error("Authentication is disabled", 503);
+  if (path === "/health" && method === "GET") {
+    const db = getDb(context.env);
+    return handleHealth(db);
   }
 
-  if (!AUTH_ENABLED && path === "/auth/me" && method === "GET") {
-    return error("Unauthorized", 401);
+  if (path === "/access/me" && method === "GET") {
+    return handleAccessMe(context);
   }
 
-  if (path === "/auth/login" && method === "POST") {
-    return handleLogin(context);
-  }
-
-  if (path === "/auth/logout" && method === "POST") {
-    return handleLogout(context);
-  }
-
-  if (path === "/auth/me" && method === "GET") {
-    return handleMe(context);
+  try {
+    await getAccessIdentity(context);
+  } catch (caughtError) {
+    return accessErrorResponse(caughtError);
   }
 
   const db = getDb(context.env);
-
-  if (path === "/health" && method === "GET") {
-    return handleHealth(db);
-  }
 
   if (path === "/dashboard" && method === "GET") {
     return handleDashboard(db);
