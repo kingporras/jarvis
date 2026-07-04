@@ -1,6 +1,11 @@
 import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
 import {
+  createMemory as createOwnedMemory,
+  listMemory as listOwnedMemory,
+  updateMemory as updateOwnedMemory,
+} from "../lib/memory";
+import {
   createProject as createOwnedProject,
   listProjects as listOwnedProjects,
   updateProject as updateOwnedProject,
@@ -160,24 +165,6 @@ function optionalString(payload: Record<string, unknown>, field: string): string
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function optionalNumber(
-  payload: Record<string, unknown>,
-  field: string,
-  fallback: number,
-): number {
-  const value = payload[field];
-
-  if (value === undefined || value === null || value === "") {
-    return fallback;
-  }
-
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new HttpError(`${field} must be a number`, 400);
-  }
-
-  return value;
-}
-
 function getPath(params: PagesContext["params"]): string {
   const rawPath = params.path;
   const path = Array.isArray(rawPath) ? rawPath.join("/") : rawPath ?? "";
@@ -286,82 +273,6 @@ async function handleDashboard(db: D1Database): Promise<Response> {
     recentMemory,
     recentDecisions,
   });
-}
-
-async function listMemory(request: Request, db: D1Database): Promise<Response> {
-  const url = new URL(request.url);
-  const clauses: string[] = [];
-  const values: D1Value[] = [];
-  const type = url.searchParams.get("type");
-  const status = url.searchParams.get("status");
-  const query = url.searchParams.get("q");
-
-  if (type) {
-    clauses.push("type = ?");
-    values.push(type);
-  }
-
-  if (status) {
-    clauses.push("status = ?");
-    values.push(status);
-  }
-
-  if (query) {
-    clauses.push("(title LIKE ? OR content LIKE ? OR summary LIKE ?)");
-    const likeQuery = `%${query}%`;
-    values.push(likeQuery, likeQuery, likeQuery);
-  }
-
-  const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  const memory = await allRows<MemoryItem>(
-    db,
-    `SELECT ${memoryColumns} FROM memory_items ${whereSql} ORDER BY updated_at DESC`,
-    values,
-  );
-
-  return success(memory);
-}
-
-async function createMemory(request: Request, db: D1Database): Promise<Response> {
-  const payload = await readJson(request);
-  const createdAt = nowIso();
-  const memory: MemoryItem = {
-    id: newId("memory"),
-    type: requiredString(payload, "type"),
-    title: requiredString(payload, "title"),
-    content: requiredString(payload, "content"),
-    summary: optionalString(payload, "summary"),
-    source: optionalString(payload, "source") ?? "manual",
-    priority: optionalString(payload, "priority") ?? "P2",
-    status: optionalString(payload, "status") ?? "active",
-    confidence: optionalNumber(payload, "confidence", 1),
-    expires_at: optionalString(payload, "expires_at"),
-    last_used_at: null,
-    created_at: createdAt,
-    updated_at: createdAt,
-  };
-
-  await prepare(
-    db,
-    "INSERT INTO memory_items (id, type, title, content, summary, source, priority, status, confidence, expires_at, last_used_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      memory.id,
-      memory.type,
-      memory.title,
-      memory.content,
-      memory.summary,
-      memory.source,
-      memory.priority,
-      memory.status,
-      memory.confidence,
-      memory.expires_at,
-      memory.last_used_at,
-      memory.created_at,
-      memory.updated_at,
-    ],
-  ).run();
-
-  return success(memory, { status: 201 });
 }
 
 async function listDecisions(request: Request, db: D1Database): Promise<Response> {
@@ -478,11 +389,16 @@ async function route(context: PagesContext): Promise<Response> {
   }
 
   if (path === "/memory" && method === "GET") {
-    return listMemory(context.request, db);
+    return listOwnedMemory(context.request, db, identity.subject);
   }
 
   if (path === "/memory" && method === "POST") {
-    return createMemory(context.request, db);
+    return createOwnedMemory(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/memory/") && method === "PATCH") {
+    const memoryId = decodeURIComponent(path.slice("/memory/".length));
+    return updateOwnedMemory(context.request, db, identity.subject, memoryId);
   }
 
   if (path === "/decisions" && method === "GET") {
