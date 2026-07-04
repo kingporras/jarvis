@@ -232,7 +232,9 @@
   .chat-input-row,
   .detail-grid,
   .decision-row__grid,
-  .quick-actions__grid {
+  .quick-actions__grid,
+  .data-form__row,
+  .data-form__row--triple {
     grid-template-columns: 1fr;
   }
 
@@ -247,6 +249,15 @@
 
   .data-table__row {
     min-width: 38rem;
+  }
+
+  .summary-strip {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .summary-strip .badge {
+    max-width: 100%;
   }
 
   .decision-item {

@@ -194,14 +194,14 @@ export const tasks: JarvisTask[] = [
   },
   {
     id: "task-auth-before-data",
-    title: "Planificar reactivacion de auth antes de datos reales",
+    title: "Validar Access antes de mas datos reales",
     projectId: "jarvis-foundation",
     projectName: "JARVIS Foundation",
     priority: "P1",
     status: "todo",
     lane: "upcoming",
-    dueLabel: "Sprint 5",
-    context: "No conectar Proyectos/Tareas a API real mientras AUTH_ENABLED siga en false.",
+    dueLabel: "Sprint 6",
+    context: "Cloudflare Access debe seguir cerrado antes de ampliar datos reales.",
   },
 ];
 
@@ -289,7 +289,7 @@ export const decisions: JarvisDecision[] = [
     title: "No conectar frontend a D1 durante Sprint 4.",
     status: "active",
     impact: "Mantiene el sprint como UX local y evita escrituras publicas.",
-    reason: "AUTH_ENABLED esta false; los datos reales deben esperar.",
+    reason: "La frontera de Access debia validarse antes de exponer datos reales.",
     projectName: "JARVIS Foundation",
     priority: "P0",
     dateLabel: "Sprint 4",
@@ -360,10 +360,10 @@ export const reminders: JarvisReminder[] = [
   },
   {
     id: "reminder-auth",
-    title: "Reactivar auth antes de conectar datos reales",
-    timeLabel: "Sprint 5",
+    title: "Validar Access antes de ampliar datos reales",
+    timeLabel: "Sprint 6",
     context:
-      "Cambiar AUTH_ENABLED a true y validar login/sesiones en produccion.",
+      "Mantener Proyectos y Tareas detras del JWT validado de Cloudflare Access.",
     status: "upcoming",
     priority: "P0",
   },
@@ -410,11 +410,11 @@ export const suggestedPrompts = [
 ];
 
 export const nextSprintRecommendation = {
-  title: "Sprint 5 - Reactivar auth privada y conectar Proyectos/Tareas a API real",
+  title: "Sprint 7 - Memoria editable real",
   steps: [
-    "Cambiar AUTH_ENABLED a true.",
-    "Configurar JARVIS_AUTH_PASSWORD_HASH en Cloudflare.",
-    "Validar login, sesiones y proteccion de APIs en produccion.",
-    "Solo despues conectar Proyectos y Tareas a datos reales.",
+    "Mantener Proyectos y Tareas protegidos por Cloudflare Access.",
+    "No introducir memoria sensible hasta validar el flujo editorial.",
+    "Definir campos minimos de memoria antes de IA, RAG o integraciones.",
+    "Conservar Dashboard y Arc Core como lectura demo hasta tener agregados reales.",
   ],
 };

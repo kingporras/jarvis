@@ -1,6 +1,16 @@
 import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
+import {
+  createProject as createOwnedProject,
+  listProjects as listOwnedProjects,
+  updateProject as updateOwnedProject,
+} from "../lib/projects";
 import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
+import {
+  createTask as createOwnedTask,
+  listTasks as listOwnedTasks,
+  updateTask as updateOwnedTask,
+} from "../lib/tasks";
 import type { D1Database, D1Value, PagesContext } from "../lib/types";
 
 interface Project {
@@ -278,108 +288,6 @@ async function handleDashboard(db: D1Database): Promise<Response> {
   });
 }
 
-async function listProjects(db: D1Database): Promise<Response> {
-  const projects = await allRows<Project>(
-    db,
-    `SELECT ${projectColumns} FROM projects ORDER BY updated_at DESC`,
-  );
-
-  return success(projects);
-}
-
-async function createProject(request: Request, db: D1Database): Promise<Response> {
-  const payload = await readJson(request);
-  const createdAt = nowIso();
-  const project: Project = {
-    id: newId("project"),
-    name: requiredString(payload, "name"),
-    objective: optionalString(payload, "objective"),
-    status: optionalString(payload, "status") ?? "active",
-    phase: optionalString(payload, "phase"),
-    priority: optionalString(payload, "priority") ?? "P2",
-    created_at: createdAt,
-    updated_at: createdAt,
-  };
-
-  await prepare(
-    db,
-    "INSERT INTO projects (id, name, objective, status, phase, priority, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      project.id,
-      project.name,
-      project.objective,
-      project.status,
-      project.phase,
-      project.priority,
-      project.created_at,
-      project.updated_at,
-    ],
-  ).run();
-
-  return success(project, { status: 201 });
-}
-
-async function listTasks(request: Request, db: D1Database): Promise<Response> {
-  const url = new URL(request.url);
-  const clauses: string[] = [];
-  const values: D1Value[] = [];
-  const projectId = url.searchParams.get("project_id");
-  const status = url.searchParams.get("status");
-
-  if (projectId) {
-    clauses.push("project_id = ?");
-    values.push(projectId);
-  }
-
-  if (status) {
-    clauses.push("status = ?");
-    values.push(status);
-  }
-
-  const whereSql = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  const tasks = await allRows<Task>(
-    db,
-    `SELECT ${taskColumns} FROM tasks ${whereSql} ORDER BY ${priorityOrderSql}, COALESCE(due_date, '9999-12-31'), updated_at DESC`,
-    values,
-  );
-
-  return success(tasks);
-}
-
-async function createTask(request: Request, db: D1Database): Promise<Response> {
-  const payload = await readJson(request);
-  const createdAt = nowIso();
-  const task: Task = {
-    id: newId("task"),
-    project_id: optionalString(payload, "project_id"),
-    title: requiredString(payload, "title"),
-    description: optionalString(payload, "description"),
-    status: optionalString(payload, "status") ?? "todo",
-    priority: optionalString(payload, "priority") ?? "P2",
-    due_date: optionalString(payload, "due_date"),
-    created_at: createdAt,
-    updated_at: createdAt,
-  };
-
-  await prepare(
-    db,
-    "INSERT INTO tasks (id, project_id, title, description, status, priority, due_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      task.id,
-      task.project_id,
-      task.title,
-      task.description,
-      task.status,
-      task.priority,
-      task.due_date,
-      task.created_at,
-      task.updated_at,
-    ],
-  ).run();
-
-  return success(task, { status: 201 });
-}
-
 async function listMemory(request: Request, db: D1Database): Promise<Response> {
   const url = new URL(request.url);
   const clauses: string[] = [];
@@ -529,8 +437,10 @@ async function route(context: PagesContext): Promise<Response> {
     return handleAccessMe(context);
   }
 
+  let identity: AccessIdentity;
+
   try {
-    await getAccessIdentity(context);
+    identity = await getAccessIdentity(context);
   } catch (caughtError) {
     return accessErrorResponse(caughtError);
   }
@@ -542,19 +452,29 @@ async function route(context: PagesContext): Promise<Response> {
   }
 
   if (path === "/projects" && method === "GET") {
-    return listProjects(db);
+    return listOwnedProjects(db, identity.subject);
   }
 
   if (path === "/projects" && method === "POST") {
-    return createProject(context.request, db);
+    return createOwnedProject(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/projects/") && method === "PATCH") {
+    const projectId = decodeURIComponent(path.slice("/projects/".length));
+    return updateOwnedProject(context.request, db, identity.subject, projectId);
   }
 
   if (path === "/tasks" && method === "GET") {
-    return listTasks(context.request, db);
+    return listOwnedTasks(db, identity.subject);
   }
 
   if (path === "/tasks" && method === "POST") {
-    return createTask(context.request, db);
+    return createOwnedTask(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/tasks/") && method === "PATCH") {
+    const taskId = decodeURIComponent(path.slice("/tasks/".length));
+    return updateOwnedTask(context.request, db, identity.subject, taskId);
   }
 
   if (path === "/memory" && method === "GET") {

@@ -43,7 +43,7 @@ export const routes: RouteDefinition[] = [
     title: "Proyectos",
     eyebrow: "Frentes activos",
     description:
-      "Mapa mock de proyectos, avances, riesgos y proximos pasos sin conexion a datos reales.",
+      "Proyectos reales persistidos en D1 y protegidos por Cloudflare Access.",
     component: ProjectsPage,
   },
   {
@@ -52,7 +52,7 @@ export const routes: RouteDefinition[] = [
     title: "Tareas",
     eyebrow: "Ejecucion",
     description:
-      "Bandeja visual para prioridades, estados y proximas acciones sin persistencia.",
+      "Bandeja real para prioridades, estados y proximas acciones persistidas.",
     component: TasksPage,
   },
   {

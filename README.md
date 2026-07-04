@@ -61,6 +61,17 @@ Guia completa: [docs/cloudflare-access.md](docs/cloudflare-access.md)
 - La auth interna de login/password/sesiones queda retirada operacionalmente. Nota historica: [docs/auth.md](docs/auth.md)
 - No introduzcas datos personales, memoria real, tareas reales, proyectos reales, decisiones reales, secretos ni integraciones hasta que el boundary Access este validado en produccion y preview.
 
+## Sprint 6 - Proyectos y Tareas reales
+
+Sprint 6 conecta exclusivamente Proyectos y Tareas a D1 mediante APIs privadas protegidas por Cloudflare Access.
+
+Guia completa: [docs/sprint-6-projects-tasks-d1.md](docs/sprint-6-projects-tasks-d1.md)
+
+- `owner_subject` procede del JWT validado por `requireAccess()`.
+- El email no se usa como clave de propiedad.
+- Dashboard, Arc Core, Memoria, Decisiones, Personas y Recordatorios siguen en modo mock.
+- No crear datos en preview hasta confirmar si comparte la misma D1 remota que produccion.
+
 ## Alcance de Sprint 1
 
 - React + Vite + TypeScript
