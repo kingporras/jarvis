@@ -15,6 +15,8 @@ const MEMORY_TYPES = [
 const PRIORITIES = ["P0", "P1", "P2", "P3", "P4"] as const;
 const MEMORY_STATUSES = ["active", "archived"] as const;
 const MEMORY_SOURCES = ["manual"] as const;
+const LINK_TARGET_TYPES = ["project", "task"] as const;
+const EMPTY_FIELDS = new Set<string>();
 const MEMORY_MUTATION_FIELDS = new Set([
   "title",
   "content",
@@ -24,6 +26,7 @@ const MEMORY_MUTATION_FIELDS = new Set([
   "source",
   "confidence",
   "expiresAt",
+  "reviewDueAt",
 ]);
 const MEMORY_CREATE_FIELDS = new Set([
   "title",
@@ -33,12 +36,15 @@ const MEMORY_CREATE_FIELDS = new Set([
   "source",
   "confidence",
   "expiresAt",
+  "reviewDueAt",
 ]);
+const LINK_CREATE_FIELDS = new Set(["targetType", "targetId"]);
 
 type MemoryType = (typeof MEMORY_TYPES)[number];
 type Priority = (typeof PRIORITIES)[number];
 type MemoryStatus = (typeof MEMORY_STATUSES)[number];
 type MemorySource = (typeof MEMORY_SOURCES)[number];
+type LinkTargetType = (typeof LINK_TARGET_TYPES)[number];
 
 interface MemoryRow {
   id: string;
@@ -50,6 +56,8 @@ interface MemoryRow {
   source: MemorySource;
   confidence: number | null;
   expires_at: string | null;
+  review_due_at: string | null;
+  last_reviewed_at: string | null;
   created_at: string;
   updated_at: string;
   archived_at: string | null;
@@ -65,9 +73,35 @@ interface MemoryDto {
   source: MemorySource;
   confidence: number | null;
   expiresAt: string | null;
+  reviewDueAt: string | null;
+  lastReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+}
+
+interface MemoryLinkRow {
+  id: string;
+  target_type: LinkTargetType;
+  target_id: string;
+  target_title: string;
+  target_status: string | null;
+  created_at: string;
+}
+
+interface MemoryLinkDto {
+  id: string;
+  targetType: LinkTargetType;
+  targetId: string;
+  targetTitle: string;
+  targetStatus: string | null;
+  createdAt: string;
+}
+
+interface OwnedTarget {
+  id: string;
+  title: string;
+  status: string | null;
 }
 
 const memorySelect = [
@@ -80,6 +114,8 @@ const memorySelect = [
   "source",
   "confidence",
   "expires_at",
+  "review_due_at",
+  "last_reviewed_at",
   "created_at",
   "updated_at",
   "archived_at",
@@ -89,8 +125,8 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function newId(): string {
-  return `memory_${crypto.randomUUID()}`;
+function newId(prefix: "memory" | "memory_link" = "memory"): string {
+  return `${prefix}_${crypto.randomUUID()}`;
 }
 
 function toMemoryDto(row: MemoryRow): MemoryDto {
@@ -104,9 +140,22 @@ function toMemoryDto(row: MemoryRow): MemoryDto {
     source: row.source,
     confidence: row.confidence,
     expiresAt: row.expires_at,
+    reviewDueAt: row.review_due_at,
+    lastReviewedAt: row.last_reviewed_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     archivedAt: row.archived_at,
+  };
+}
+
+function toMemoryLinkDto(row: MemoryLinkRow): MemoryLinkDto {
+  return {
+    id: row.id,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    targetTitle: row.target_title,
+    targetStatus: row.target_status,
+    createdAt: row.created_at,
   };
 }
 
@@ -132,6 +181,21 @@ function assertKnownFields(payload: Record<string, unknown>, allowed: Set<string
   if (unknownField) {
     throw new HttpError(`Unknown field: ${unknownField}`, 400);
   }
+}
+
+async function readEmptyJsonIfPresent(request: Request): Promise<void> {
+  const contentLength = request.headers.get("Content-Length");
+  const hasBody =
+    request.body !== null &&
+    (contentLength === null || contentLength.trim() === "" || contentLength.trim() !== "0");
+
+  if (!hasBody) {
+    return;
+  }
+
+  assertJsonRequest(request);
+  const payload = await readJson(request);
+  assertKnownFields(payload, EMPTY_FIELDS);
 }
 
 function invalidRequired(field: string): never {
@@ -233,6 +297,77 @@ async function findMemory(db: D1Database, ownerSubject: string, memoryId: string
   );
 }
 
+async function assertOwnedMemory(db: D1Database, ownerSubject: string, memoryId: string): Promise<MemoryRow> {
+  const memory = await findMemory(db, ownerSubject, memoryId);
+
+  if (!memory) {
+    throw new HttpError("Not found", 404);
+  }
+
+  return memory;
+}
+
+async function findOwnedTarget(
+  db: D1Database,
+  ownerSubject: string,
+  targetType: LinkTargetType,
+  targetId: string,
+): Promise<OwnedTarget | null> {
+  if (targetType === "project") {
+    return firstRow<OwnedTarget>(
+      db,
+      "SELECT id, name AS title, status FROM projects WHERE id = ? AND owner_subject = ?",
+      [targetId, ownerSubject],
+    );
+  }
+
+  return firstRow<OwnedTarget>(
+    db,
+    "SELECT id, title, status FROM tasks WHERE id = ? AND owner_subject = ?",
+    [targetId, ownerSubject],
+  );
+}
+
+async function assertOwnedTarget(
+  db: D1Database,
+  ownerSubject: string,
+  targetType: LinkTargetType,
+  targetId: string,
+): Promise<OwnedTarget> {
+  const target = await findOwnedTarget(db, ownerSubject, targetType, targetId);
+
+  if (!target) {
+    throw new HttpError("Not found", 404);
+  }
+
+  return target;
+}
+
+async function findLinkForMemory(
+  db: D1Database,
+  memoryId: string,
+  linkId: string,
+): Promise<{ id: string } | null> {
+  return firstRow<{ id: string }>(
+    db,
+    "SELECT id FROM memory_links WHERE id = ? AND source_memory_id = ?",
+    [linkId, memoryId],
+  );
+}
+
+async function findExistingLink(
+  db: D1Database,
+  memoryId: string,
+  targetType: LinkTargetType,
+  targetId: string,
+): Promise<{ id: string } | null> {
+  return firstRow<{ id: string }>(
+    db,
+    "SELECT id FROM memory_links WHERE source_memory_id = ? AND target_type = ? AND target_id = ?",
+    [memoryId, targetType, targetId],
+  );
+}
+
 function filterParam<TValue extends string>(
   url: URL,
   name: string,
@@ -249,6 +384,11 @@ function filterParam<TValue extends string>(
   }
 
   return value as TValue;
+}
+
+function targetIdField(payload: Record<string, unknown>): string {
+  const value = stringField(payload, "targetId", { maxLength: 180, required: true });
+  return value ?? invalidRequired("targetId");
 }
 
 export async function listMemory(request: Request, db: D1Database, ownerSubject: string): Promise<Response> {
@@ -308,6 +448,8 @@ export async function createMemory(
     source: enumField(payload, "source", MEMORY_SOURCES, "manual") ?? "manual",
     confidence: confidenceField(payload, 1) ?? 1,
     expires_at: optionalDateField(payload, "expiresAt") ?? null,
+    review_due_at: optionalDateField(payload, "reviewDueAt") ?? null,
+    last_reviewed_at: null,
     created_at: createdAt,
     updated_at: createdAt,
     archived_at: null,
@@ -316,8 +458,8 @@ export async function createMemory(
   await prepare(
     db,
     `INSERT INTO memory_items
-      (id, owner_subject, title, content, type, priority, status, source, confidence, expires_at, created_at, updated_at, archived_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, owner_subject, title, content, type, priority, status, source, confidence, expires_at, review_due_at, last_reviewed_at, created_at, updated_at, archived_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       row.id,
       ownerSubject,
@@ -329,6 +471,8 @@ export async function createMemory(
       row.source,
       row.confidence,
       row.expires_at,
+      row.review_due_at,
+      row.last_reviewed_at,
       row.created_at,
       row.updated_at,
       row.archived_at,
@@ -347,12 +491,7 @@ export async function updateMemory(
   assertSameOriginMutation(request);
   assertJsonRequest(request);
 
-  const existing = await findMemory(db, ownerSubject, memoryId);
-
-  if (!existing) {
-    throw new HttpError("Not found", 404);
-  }
-
+  const existing = await assertOwnedMemory(db, ownerSubject, memoryId);
   const payload = await readJson(request);
   assertKnownFields(payload, MEMORY_MUTATION_FIELDS);
 
@@ -401,6 +540,12 @@ export async function updateMemory(
     values.push(expiresAt);
   }
 
+  const reviewDueAt = optionalDateField(payload, "reviewDueAt");
+  if (reviewDueAt !== undefined) {
+    updates.push("review_due_at = ?");
+    values.push(reviewDueAt);
+  }
+
   const status = enumField(payload, "status", MEMORY_STATUSES);
   if (status !== undefined) {
     updates.push("status = ?");
@@ -421,6 +566,149 @@ export async function updateMemory(
     db,
     `UPDATE memory_items SET ${updates.join(", ")} WHERE id = ? AND owner_subject = ?`,
     values,
+  ).run();
+
+  const updated = await findMemory(db, ownerSubject, memoryId);
+
+  if (!updated) {
+    throw new HttpError("Not found", 404);
+  }
+
+  return success(toMemoryDto(updated), { headers: noStore() });
+}
+
+export async function listMemoryLinks(
+  db: D1Database,
+  ownerSubject: string,
+  memoryId: string,
+): Promise<Response> {
+  await assertOwnedMemory(db, ownerSubject, memoryId);
+
+  const rows = await allRows<MemoryLinkRow>(
+    db,
+    `SELECT
+       memory_links.id,
+       memory_links.target_type,
+       memory_links.target_id,
+       CASE
+         WHEN memory_links.target_type = 'project' THEN projects.name
+         ELSE tasks.title
+       END AS target_title,
+       CASE
+         WHEN memory_links.target_type = 'project' THEN projects.status
+         ELSE tasks.status
+       END AS target_status,
+       memory_links.created_at
+     FROM memory_links
+     LEFT JOIN projects
+       ON memory_links.target_type = 'project'
+      AND projects.id = memory_links.target_id
+      AND projects.owner_subject = ?
+     LEFT JOIN tasks
+       ON memory_links.target_type = 'task'
+      AND tasks.id = memory_links.target_id
+      AND tasks.owner_subject = ?
+     WHERE memory_links.source_memory_id = ?
+       AND (
+         (memory_links.target_type = 'project' AND projects.id IS NOT NULL)
+         OR (memory_links.target_type = 'task' AND tasks.id IS NOT NULL)
+       )
+     ORDER BY memory_links.created_at DESC, memory_links.id ASC`,
+    [ownerSubject, ownerSubject, memoryId],
+  );
+
+  return success(rows.map(toMemoryLinkDto), { headers: noStore() });
+}
+
+export async function createMemoryLink(
+  request: Request,
+  db: D1Database,
+  ownerSubject: string,
+  memoryId: string,
+): Promise<Response> {
+  assertSameOriginMutation(request);
+  assertJsonRequest(request);
+  await assertOwnedMemory(db, ownerSubject, memoryId);
+
+  const payload = await readJson(request);
+  assertKnownFields(payload, LINK_CREATE_FIELDS);
+
+  const targetType = enumField(payload, "targetType", LINK_TARGET_TYPES) ?? invalidRequired("targetType");
+  const targetId = targetIdField(payload);
+  const target = await assertOwnedTarget(db, ownerSubject, targetType, targetId);
+  const existing = await findExistingLink(db, memoryId, targetType, targetId);
+
+  if (existing) {
+    throw new HttpError("Link already exists", 400);
+  }
+
+  const createdAt = nowIso();
+  const linkId = newId("memory_link");
+
+  await prepare(
+    db,
+    "INSERT INTO memory_links (id, source_memory_id, target_type, target_id, relation, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+    [linkId, memoryId, targetType, targetId, "related", createdAt],
+  ).run();
+
+  return success(
+    {
+      id: linkId,
+      targetType,
+      targetId,
+      targetTitle: target.title,
+      targetStatus: target.status,
+      createdAt,
+    },
+    { status: 201, headers: noStore() },
+  );
+}
+
+export async function deleteMemoryLink(
+  request: Request,
+  db: D1Database,
+  ownerSubject: string,
+  memoryId: string,
+  linkId: string,
+): Promise<Response> {
+  assertSameOriginMutation(request);
+  await assertOwnedMemory(db, ownerSubject, memoryId);
+
+  const link = await findLinkForMemory(db, memoryId, linkId);
+
+  if (!link) {
+    throw new HttpError("Not found", 404);
+  }
+
+  await prepare(
+    db,
+    "DELETE FROM memory_links WHERE id = ? AND source_memory_id = ?",
+    [linkId, memoryId],
+  ).run();
+
+  return success({ id: linkId }, { headers: noStore() });
+}
+
+export async function reviewMemory(
+  request: Request,
+  db: D1Database,
+  ownerSubject: string,
+  memoryId: string,
+): Promise<Response> {
+  assertSameOriginMutation(request);
+  await readEmptyJsonIfPresent(request);
+  await assertOwnedMemory(db, ownerSubject, memoryId);
+
+  const reviewedAt = nowIso();
+
+  await prepare(
+    db,
+    `UPDATE memory_items
+     SET last_reviewed_at = ?,
+         review_due_at = ?,
+         updated_at = ?
+     WHERE id = ? AND owner_subject = ?`,
+    [reviewedAt, null, reviewedAt, memoryId, ownerSubject],
   ).run();
 
   const updated = await findMemory(db, ownerSubject, memoryId);

@@ -23,6 +23,8 @@ export interface RealMemory {
   source: MemorySource;
   confidence: number | null;
   expiresAt: string | null;
+  reviewDueAt: string | null;
+  lastReviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
@@ -37,12 +39,29 @@ export interface MemoryPayload {
   source?: MemorySource;
   confidence?: number;
   expiresAt?: string | null;
+  reviewDueAt?: string | null;
 }
 
 export interface MemoryFilters {
   type?: RealMemoryType;
   priority?: Priority;
   status?: RealMemoryStatus;
+}
+
+export type MemoryLinkTargetType = "project" | "task";
+
+export interface MemoryLink {
+  id: string;
+  targetType: MemoryLinkTargetType;
+  targetId: string;
+  targetTitle: string;
+  targetStatus: string | null;
+  createdAt: string;
+}
+
+export interface MemoryLinkPayload {
+  targetType: MemoryLinkTargetType;
+  targetId: string;
 }
 
 type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -109,5 +128,31 @@ export function updateMemory(memoryId: string, payload: MemoryPayload): Promise<
   return apiFetch<RealMemory>(`/api/memory/${encodeURIComponent(memoryId)}`, {
     method: "PATCH",
     body: jsonBody(payload),
+  });
+}
+
+export function fetchMemoryLinks(memoryId: string): Promise<MemoryLink[]> {
+  return apiFetch<MemoryLink[]>(`/api/memory/${encodeURIComponent(memoryId)}/links`);
+}
+
+export function createMemoryLink(memoryId: string, payload: MemoryLinkPayload): Promise<MemoryLink> {
+  return apiFetch<MemoryLink>(`/api/memory/${encodeURIComponent(memoryId)}/links`, {
+    method: "POST",
+    body: jsonBody(payload),
+  });
+}
+
+export function deleteMemoryLink(memoryId: string, linkId: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(
+    `/api/memory/${encodeURIComponent(memoryId)}/links/${encodeURIComponent(linkId)}`,
+    {
+      method: "DELETE",
+    },
+  );
+}
+
+export function reviewMemory(memoryId: string): Promise<RealMemory> {
+  return apiFetch<RealMemory>(`/api/memory/${encodeURIComponent(memoryId)}/review`, {
+    method: "POST",
   });
 }

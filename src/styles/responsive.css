@@ -233,6 +233,7 @@
   .detail-grid,
   .decision-row__grid,
   .quick-actions__grid,
+  .memory-link-form__row,
   .data-form__row,
   .data-form__row--triple {
     grid-template-columns: 1fr;

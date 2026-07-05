@@ -8,10 +8,17 @@ import { FilterChipGroup } from "../components/ui/FilterChipGroup";
 import { PriorityBadge } from "../components/ui/PriorityBadge";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import { StatusBadge } from "../components/ui/StatusBadge";
+import { fetchProjects, fetchTasks, type RealProject, type RealTask } from "../lib/api/projectsTasks";
 import {
   createMemory,
+  createMemoryLink,
+  deleteMemoryLink,
   fetchMemories,
+  fetchMemoryLinks,
+  reviewMemory,
   updateMemory,
+  type MemoryLink,
+  type MemoryLinkTargetType,
   type MemoryPayload,
   type RealMemory,
   type RealMemoryStatus,
@@ -22,6 +29,17 @@ import type { Priority } from "../types/jarvis";
 type TypeFilter = "all" | RealMemoryType;
 type PriorityFilter = "all" | Priority;
 type FormMode = "create" | "edit";
+
+interface LinkDraft {
+  targetId: string;
+  targetType: MemoryLinkTargetType;
+}
+
+interface LinkTargetOption {
+  id: string;
+  label: string;
+  status: string | null;
+}
 
 const memoryTypes: RealMemoryType[] = [
   "personal",
@@ -51,6 +69,7 @@ const emptyMemoryForm = {
   content: "",
   expiresAt: "",
   priority: "P2" as Priority,
+  reviewDueAt: "",
   title: "",
   type: "knowledge" as RealMemoryType,
 };
@@ -91,7 +110,11 @@ function formatDate(value: string | null): string {
 }
 
 function isExpired(memory: RealMemory): boolean {
-  return memory.status === "active" && Boolean(memory.expiresAt) && dateInputValue(memory.expiresAt) < todayInputValue();
+  return Boolean(memory.expiresAt) && dateInputValue(memory.expiresAt) < todayInputValue();
+}
+
+function isReviewDue(memory: RealMemory): boolean {
+  return Boolean(memory.reviewDueAt) && dateInputValue(memory.reviewDueAt) < todayInputValue();
 }
 
 function upsertMemory(memories: RealMemory[], memory: RealMemory): RealMemory[] {
@@ -120,8 +143,60 @@ function formDataText(data: FormData, field: string, fallback: string): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function projectOptions(projects: RealProject[]): LinkTargetOption[] {
+  return projects.map((project) => ({
+    id: project.id,
+    label: project.name,
+    status: project.status,
+  }));
+}
+
+function taskOptions(tasks: RealTask[]): LinkTargetOption[] {
+  return tasks.map((task) => ({
+    id: task.id,
+    label: task.title,
+    status: task.status,
+  }));
+}
+
+function linkedTargetIds(links: MemoryLink[], targetType: MemoryLinkTargetType): Set<string> {
+  return new Set(links.filter((link) => link.targetType === targetType).map((link) => link.targetId));
+}
+
+function defaultLinkDraft(): LinkDraft {
+  return { targetId: "", targetType: "project" };
+}
+
+function targetLabel(targetType: MemoryLinkTargetType): string {
+  return targetType === "project" ? "proyecto" : "tarea";
+}
+
+function targetLabelWithArticle(targetType: MemoryLinkTargetType): string {
+  return targetType === "project" ? "un proyecto" : "una tarea";
+}
+
+function targetPluralLabel(targetType: MemoryLinkTargetType): string {
+  return targetType === "project" ? "proyectos" : "tareas";
+}
+
+function allTargetsLinkedMessage(targetType: MemoryLinkTargetType): string {
+  return targetType === "project"
+    ? "Todos los proyectos disponibles ya estan enlazados."
+    : "Todas las tareas disponibles ya estan enlazadas.";
+}
+
+function memoryCardClassName(expired: boolean, reviewDue: boolean): string {
+  return ["memory-card", expired ? "memory-card--expired" : null, reviewDue ? "memory-card--review" : null]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function MemoryPage() {
   const [memories, setMemories] = useState<RealMemory[]>([]);
+  const [projects, setProjects] = useState<RealProject[]>([]);
+  const [tasks, setTasks] = useState<RealTask[]>([]);
+  const [linksByMemoryId, setLinksByMemoryId] = useState<Record<string, MemoryLink[]>>({});
+  const [linkDrafts, setLinkDrafts] = useState<Record<string, LinkDraft>>({});
   const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [statusFilter, setStatusFilter] = useState<RealMemoryStatus>("active");
@@ -137,18 +212,30 @@ export function MemoryPage() {
     [memories, priorityFilter, statusFilter, typeFilter],
   );
   const expiredCount = visibleMemories.filter(isExpired).length;
+  const reviewDueCount = visibleMemories.filter(isReviewDue).length;
 
-  async function loadMemories() {
+  async function loadMemoryData() {
     setLoading(true);
     setError(null);
 
     try {
-      const data = await fetchMemories({
-        priority: priorityFilter === "all" ? undefined : priorityFilter,
-        status: statusFilter,
-        type: typeFilter === "all" ? undefined : typeFilter,
-      });
-      setMemories(data);
+      const [memoryData, projectData, taskData] = await Promise.all([
+        fetchMemories({
+          priority: priorityFilter === "all" ? undefined : priorityFilter,
+          status: statusFilter,
+          type: typeFilter === "all" ? undefined : typeFilter,
+        }),
+        fetchProjects(),
+        fetchTasks(),
+      ]);
+      const linkEntries = await Promise.all(
+        memoryData.map(async (memory) => [memory.id, await fetchMemoryLinks(memory.id)] as const),
+      );
+
+      setMemories(memoryData);
+      setProjects(projectData);
+      setTasks(taskData);
+      setLinksByMemoryId(Object.fromEntries(linkEntries));
     } catch {
       setError("No se pudieron cargar las memorias reales. Revisa Access y vuelve a intentarlo.");
     } finally {
@@ -157,7 +244,7 @@ export function MemoryPage() {
   }
 
   useEffect(() => {
-    void loadMemories();
+    void loadMemoryData();
   }, [priorityFilter, statusFilter, typeFilter]);
 
   function openCreateForm() {
@@ -171,6 +258,7 @@ export function MemoryPage() {
       content: memory.content,
       expiresAt: dateInputValue(memory.expiresAt),
       priority: memory.priority,
+      reviewDueAt: dateInputValue(memory.reviewDueAt),
       title: memory.title,
       type: memory.type,
     });
@@ -188,12 +276,14 @@ export function MemoryPage() {
     data: FormData,
   ): Required<Pick<MemoryPayload, "title" | "content" | "type" | "priority">> & MemoryPayload {
     const expiresAt = formDataText(data, "expiresAt", form.expiresAt);
+    const reviewDueAt = formDataText(data, "reviewDueAt", form.reviewDueAt);
 
     return {
       confidence: mediumConfidence,
       content: formDataText(data, "content", form.content),
       expiresAt: nullableDate(expiresAt),
       priority: formDataText(data, "priority", form.priority) as Priority,
+      reviewDueAt: nullableDate(reviewDueAt),
       source: "manual",
       title: formDataText(data, "title", form.title),
       type: formDataText(data, "type", form.type) as RealMemoryType,
@@ -208,12 +298,14 @@ export function MemoryPage() {
     try {
       const payload = memoryPayload(new FormData(event.currentTarget));
       const isEditing = formMode === "edit" && Boolean(editingMemoryId);
-      const memory = isEditing && editingMemoryId ? await updateMemory(editingMemoryId, payload) : await createMemory(payload);
+      const memory =
+        isEditing && editingMemoryId ? await updateMemory(editingMemoryId, payload) : await createMemory(payload);
 
       if (!isEditing) {
         setStatusFilter("active");
         setTypeFilter("all");
         setPriorityFilter("all");
+        setLinksByMemoryId((currentLinks) => ({ ...currentLinks, [memory.id]: [] }));
       }
 
       setMemories((currentMemories) => upsertMemory(currentMemories, memory));
@@ -239,6 +331,67 @@ export function MemoryPage() {
     }
   }
 
+  async function markReviewed(memory: RealMemory) {
+    setSaving(true);
+    setError(null);
+
+    try {
+      const updated = await reviewMemory(memory.id);
+      setMemories((currentMemories) => upsertMemory(currentMemories, updated));
+    } catch {
+      setError("No se pudo marcar la memoria como revisada.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateLinkDraft(memoryId: string, draft: Partial<LinkDraft>) {
+    setLinkDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [memoryId]: { ...(currentDrafts[memoryId] ?? defaultLinkDraft()), ...draft },
+    }));
+  }
+
+  async function handleCreateLink(memory: RealMemory, draft: LinkDraft) {
+    if (!draft.targetId) {
+      setError(`Elige ${targetLabelWithArticle(draft.targetType)} antes de enlazar.`);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const link = await createMemoryLink(memory.id, draft);
+      setLinksByMemoryId((currentLinks) => ({
+        ...currentLinks,
+        [memory.id]: [link, ...(currentLinks[memory.id] ?? [])],
+      }));
+      updateLinkDraft(memory.id, { targetId: "" });
+    } catch {
+      setError("No se pudo crear el enlace. El destino puede no existir, no ser propio o ya estar enlazado.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteLink(memory: RealMemory, link: MemoryLink) {
+    setSaving(true);
+    setError(null);
+
+    try {
+      await deleteMemoryLink(memory.id, link.id);
+      setLinksByMemoryId((currentLinks) => ({
+        ...currentLinks,
+        [memory.id]: (currentLinks[memory.id] ?? []).filter((item) => item.id !== link.id),
+      }));
+    } catch {
+      setError("No se pudo quitar el enlace.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -253,11 +406,12 @@ export function MemoryPage() {
           {statusFilter === "active" ? "Activas" : "Archivadas"}
         </Badge>
         {expiredCount > 0 ? <Badge tone="warning">{expiredCount} caducadas</Badge> : null}
+        {reviewDueCount > 0 ? <Badge tone="warning">{reviewDueCount} con revision pendiente</Badge> : null}
       </section>
 
       {error ? (
         <EmptyState badge="Error seguro" description={error} title="No se pudo completar la operacion">
-          <Button onClick={() => void loadMemories()} variant="secondary">
+          <Button onClick={() => void loadMemoryData()} variant="secondary">
             Reintentar
           </Button>
         </EmptyState>
@@ -310,7 +464,7 @@ export function MemoryPage() {
             Nueva memoria
           </Button>
         }
-        description="Las archivadas solo aparecen al elegir ese filtro. La caducidad avisa, no borra ni archiva."
+        description="Las archivadas solo aparecen al elegir ese filtro. La caducidad y revision avisan, no borran ni archivan."
         title="Contexto estructurado"
       />
 
@@ -400,6 +554,22 @@ export function MemoryPage() {
                 />
               </label>
             </div>
+            <label>
+              Revisar el
+              <input
+                name="reviewDueAt"
+                onChange={(event) => {
+                  const reviewDueAt = event.currentTarget.value;
+                  setForm((draft) => ({ ...draft, reviewDueAt }));
+                }}
+                onInput={(event) => {
+                  const reviewDueAt = event.currentTarget.value;
+                  setForm((draft) => ({ ...draft, reviewDueAt }));
+                }}
+                type="date"
+                value={form.reviewDueAt}
+              />
+            </label>
             <div className="memory-form-actions">
               <Button disabled={saving} type="submit" variant="primary">
                 {formMode === "edit" ? "Guardar cambios" : "Crear memoria"}
@@ -437,9 +607,18 @@ export function MemoryPage() {
         <section className="memory-card-grid">
           {visibleMemories.map((memory) => {
             const expired = isExpired(memory);
+            const reviewDue = isReviewDue(memory);
+            const links = linksByMemoryId[memory.id] ?? [];
+            const draft = linkDrafts[memory.id] ?? defaultLinkDraft();
+            const options =
+              draft.targetType === "project" ? projectOptions(projects) : taskOptions(tasks);
+            const linkedIds = linkedTargetIds(links, draft.targetType);
+            const availableOptions = options.filter((option) => !linkedIds.has(option.id));
+            const noTargets = options.length === 0;
+            const noAvailableTargets = options.length > 0 && availableOptions.length === 0;
 
             return (
-              <article className={expired ? "memory-card memory-card--expired" : "memory-card"} key={memory.id}>
+              <article className={memoryCardClassName(expired, reviewDue)} key={memory.id}>
                 <div className="memory-card__top">
                   <span>{typeLabels[memory.type]}</span>
                   <PriorityBadge priority={memory.priority} />
@@ -450,19 +629,116 @@ export function MemoryPage() {
                   <StatusBadge status={memory.status} />
                   <span>Actualizada: {formatDate(memory.updatedAt)}</span>
                   <span>Caduca: {formatDate(memory.expiresAt)}</span>
+                  <span>Revisar: {formatDate(memory.reviewDueAt)}</span>
                 </div>
                 {expired ? (
                   <div className="memory-card__warning" role="status">
                     <Badge className="memory-card__expired-badge" tone="warning">
                       Caducada
                     </Badge>
-                    <span>Esta memoria activa supero su fecha de caducidad. No se archiva automaticamente.</span>
+                    <span>Esta memoria supero su fecha de caducidad. No se archiva automaticamente.</span>
                   </div>
                 ) : null}
+                {reviewDue ? (
+                  <div className="memory-card__warning memory-card__warning--review" role="status">
+                    <Badge className="memory-card__review-badge" tone="warning">
+                      Revision pendiente
+                    </Badge>
+                    <span>La fecha de revision manual ya paso. Puedes marcarla revisada sin cambiar contenido.</span>
+                  </div>
+                ) : null}
+
+                <section className="memory-card__links" aria-label={`Enlaces de ${memory.title}`}>
+                  <div className="memory-card__link-header">
+                    <strong>Enlaces</strong>
+                    <span>{links.length} vinculados</span>
+                  </div>
+                  {links.length > 0 ? (
+                    <div className="memory-link-list">
+                      {links.map((link) => (
+                        <span className="memory-link-chip" key={link.id}>
+                          <span>
+                            <strong>{link.targetType === "project" ? "Proyecto" : "Tarea"}</strong>
+                            {link.targetTitle}
+                            {link.targetStatus ? <small>{link.targetStatus}</small> : null}
+                          </span>
+                          <button
+                            disabled={saving}
+                            onClick={() => void handleDeleteLink(memory, link)}
+                            type="button"
+                          >
+                            Quitar
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-muted">Sin enlaces todavia.</p>
+                  )}
+                  <div className="memory-link-form">
+                    <div className="memory-link-form__row">
+                      <label>
+                        Tipo de enlace
+                        <select
+                          disabled={saving}
+                          onChange={(event) =>
+                            updateLinkDraft(memory.id, {
+                              targetId: "",
+                              targetType: event.currentTarget.value as MemoryLinkTargetType,
+                            })
+                          }
+                          value={draft.targetType}
+                        >
+                          <option value="project">Proyecto</option>
+                          <option value="task">Tarea</option>
+                        </select>
+                      </label>
+                      <label>
+                        Destino
+                        <select
+                          disabled={saving || availableOptions.length === 0}
+                          onChange={(event) => updateLinkDraft(memory.id, { targetId: event.currentTarget.value })}
+                          value={draft.targetId}
+                        >
+                          <option value="">
+                            {noTargets
+                              ? `No hay ${targetPluralLabel(draft.targetType)} reales`
+                              : noAvailableTargets
+                                ? `Sin ${targetPluralLabel(draft.targetType)} disponibles`
+                                : `Elegir ${targetLabel(draft.targetType)}`}
+                          </option>
+                          {availableOptions.map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    {noTargets ? (
+                      <p className="text-muted">No hay {targetPluralLabel(draft.targetType)} reales disponibles.</p>
+                    ) : noAvailableTargets ? (
+                      <p className="text-muted">{allTargetsLinkedMessage(draft.targetType)}</p>
+                    ) : null}
+                    <Button
+                      disabled={saving || !draft.targetId}
+                      onClick={() => void handleCreateLink(memory, draft)}
+                      variant="secondary"
+                    >
+                      Enlazar
+                    </Button>
+                  </div>
+                </section>
+
                 <div className="memory-card__actions">
                   <Button disabled={saving} onClick={() => openEditForm(memory)} variant="secondary">
                     Editar
                   </Button>
+                  {reviewDue ? (
+                    <Button disabled={saving} onClick={() => void markReviewed(memory)} variant="primary">
+                      Marcar revisada
+                    </Button>
+                  ) : null}
                   <Button
                     disabled={saving}
                     onClick={() =>

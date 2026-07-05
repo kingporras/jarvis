@@ -1,8 +1,12 @@
 import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
 import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
 import {
+  createMemoryLink as createOwnedMemoryLink,
   createMemory as createOwnedMemory,
+  deleteMemoryLink as deleteOwnedMemoryLink,
+  listMemoryLinks as listOwnedMemoryLinks,
   listMemory as listOwnedMemory,
+  reviewMemory as reviewOwnedMemory,
   updateMemory as updateOwnedMemory,
 } from "../lib/memory";
 import {
@@ -394,6 +398,30 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (path === "/memory" && method === "POST") {
     return createOwnedMemory(context.request, db, identity.subject);
+  }
+
+  const memoryLinksMatch = path.match(/^\/memory\/([^/]+)\/links$/);
+  if (memoryLinksMatch && method === "GET") {
+    const memoryId = decodeURIComponent(memoryLinksMatch[1]);
+    return listOwnedMemoryLinks(db, identity.subject, memoryId);
+  }
+
+  if (memoryLinksMatch && method === "POST") {
+    const memoryId = decodeURIComponent(memoryLinksMatch[1]);
+    return createOwnedMemoryLink(context.request, db, identity.subject, memoryId);
+  }
+
+  const memoryLinkDeleteMatch = path.match(/^\/memory\/([^/]+)\/links\/([^/]+)$/);
+  if (memoryLinkDeleteMatch && method === "DELETE") {
+    const memoryId = decodeURIComponent(memoryLinkDeleteMatch[1]);
+    const linkId = decodeURIComponent(memoryLinkDeleteMatch[2]);
+    return deleteOwnedMemoryLink(context.request, db, identity.subject, memoryId, linkId);
+  }
+
+  const memoryReviewMatch = path.match(/^\/memory\/([^/]+)\/review$/);
+  if (memoryReviewMatch && method === "POST") {
+    const memoryId = decodeURIComponent(memoryReviewMatch[1]);
+    return reviewOwnedMemory(context.request, db, identity.subject, memoryId);
   }
 
   if (path.startsWith("/memory/") && method === "PATCH") {

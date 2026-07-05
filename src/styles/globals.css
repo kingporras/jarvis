@@ -1191,6 +1191,10 @@ button.project-summary-card {
   border-color: rgba(228, 189, 115, 0.48);
 }
 
+.memory-card--review {
+  border-color: rgba(99, 214, 197, 0.38);
+}
+
 .memory-card__content {
   white-space: pre-wrap;
 }
@@ -1208,6 +1212,114 @@ button.project-summary-card {
   background: rgba(228, 189, 115, 0.08);
   color: var(--color-text-soft);
   padding: var(--space-3);
+}
+
+.memory-card__warning--review {
+  border-color: rgba(99, 214, 197, 0.28);
+  background: rgba(99, 214, 197, 0.08);
+}
+
+.memory-card__links {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+
+.memory-card__link-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--color-text-soft);
+  font-size: 0.82rem;
+}
+
+.memory-link-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.memory-link-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--color-text-soft);
+  padding: 0.5rem 0.6rem;
+}
+
+.memory-link-chip > span {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+}
+
+.memory-link-chip strong,
+.memory-link-chip small {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.memory-link-chip button {
+  border: 0;
+  background: transparent;
+  color: var(--color-accent-strong);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 760;
+  padding: 0.25rem;
+}
+
+.memory-link-chip button:disabled {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
+.memory-link-form {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.memory-link-form__row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+  gap: var(--space-3);
+}
+
+.memory-link-form label {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+  color: var(--color-text-soft);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.memory-link-form select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(5, 6, 8, 0.36);
+  color: var(--color-text);
+  padding: 0.62rem 0.75rem;
+  outline: none;
+}
+
+.memory-link-form select:focus {
+  border-color: rgba(99, 214, 197, 0.48);
+  box-shadow: 0 0 0 3px rgba(99, 214, 197, 0.2);
 }
 
 .memory-card__actions,
