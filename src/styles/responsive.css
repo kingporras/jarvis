@@ -344,6 +344,11 @@
 }
 
 @media (max-width: 340px) {
+  html,
+  body {
+    min-width: 0;
+  }
+
   .page-header h1 {
     font-size: 1.75rem;
     overflow-wrap: break-word;
