@@ -2,7 +2,7 @@ export type Priority = "P0" | "P1" | "P2" | "P3" | "P4";
 
 export type ProjectStatus = "active" | "planning" | "paused" | "completed" | "archived";
 export type TaskStatus = "todo" | "in_progress" | "blocked" | "done";
-export type DecisionStatus = "active" | "needs_review" | "superseded";
+export type DecisionStatus = "active" | "needs_review" | "open" | "decided" | "superseded" | "archived";
 export type ReminderStatus = "upcoming" | "done";
 
 export type MemoryType =

@@ -1,5 +1,10 @@
 import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
-import { allRows, countRows, firstRow, getDb, prepare } from "../lib/db";
+import { allRows, countRows, firstRow, getDb } from "../lib/db";
+import {
+  createDecision as createOwnedDecision,
+  listDecisions as listOwnedDecisions,
+  updateDecision as updateOwnedDecision,
+} from "../lib/decisions";
 import {
   createMemoryLink as createOwnedMemoryLink,
   createMemory as createOwnedMemory,
@@ -14,13 +19,13 @@ import {
   listProjects as listOwnedProjects,
   updateProject as updateOwnedProject,
 } from "../lib/projects";
-import { error, HttpError, json, notFound, readJson, success } from "../lib/responses";
+import { error, HttpError, json, notFound, success } from "../lib/responses";
 import {
   createTask as createOwnedTask,
   listTasks as listOwnedTasks,
   updateTask as updateOwnedTask,
 } from "../lib/tasks";
-import type { D1Database, D1Value, PagesContext } from "../lib/types";
+import type { D1Database, PagesContext } from "../lib/types";
 
 interface Project {
   id: string;
@@ -139,36 +144,6 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-function newId(prefix?: string): string {
-  const id = crypto.randomUUID();
-  return prefix ? `${prefix}_${id}` : id;
-}
-
-function requiredString(payload: Record<string, unknown>, field: string): string {
-  const value = payload[field];
-
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new HttpError(`${field} is required`, 400);
-  }
-
-  return value.trim();
-}
-
-function optionalString(payload: Record<string, unknown>, field: string): string | null {
-  const value = payload[field];
-
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  if (typeof value !== "string") {
-    throw new HttpError(`${field} must be a string`, 400);
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 function getPath(params: PagesContext["params"]): string {
   const rawPath = params.path;
   const path = Array.isArray(rawPath) ? rawPath.join("/") : rawPath ?? "";
@@ -279,58 +254,6 @@ async function handleDashboard(db: D1Database): Promise<Response> {
   });
 }
 
-async function listDecisions(request: Request, db: D1Database): Promise<Response> {
-  const url = new URL(request.url);
-  const projectId = url.searchParams.get("project_id");
-  const values: D1Value[] = [];
-  let whereSql = "";
-
-  if (projectId) {
-    whereSql = "WHERE project_id = ?";
-    values.push(projectId);
-  }
-
-  const decisions = await allRows<Decision>(
-    db,
-    `SELECT ${decisionColumns} FROM decisions ${whereSql} ORDER BY decided_at DESC`,
-    values,
-  );
-
-  return success(decisions);
-}
-
-async function createDecision(request: Request, db: D1Database): Promise<Response> {
-  const payload = await readJson(request);
-  const createdAt = nowIso();
-  const decision: Decision = {
-    id: newId("decision"),
-    project_id: optionalString(payload, "project_id"),
-    title: requiredString(payload, "title"),
-    reason: optionalString(payload, "reason"),
-    impact: optionalString(payload, "impact"),
-    decided_at: createdAt,
-    created_at: createdAt,
-    updated_at: createdAt,
-  };
-
-  await prepare(
-    db,
-    "INSERT INTO decisions (id, project_id, title, reason, impact, decided_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-    [
-      decision.id,
-      decision.project_id,
-      decision.title,
-      decision.reason,
-      decision.impact,
-      decision.decided_at,
-      decision.created_at,
-      decision.updated_at,
-    ],
-  ).run();
-
-  return success(decision, { status: 201 });
-}
-
 async function route(context: PagesContext): Promise<Response> {
   const path = getPath(context.params);
   const method = context.request.method.toUpperCase();
@@ -430,11 +353,16 @@ async function route(context: PagesContext): Promise<Response> {
   }
 
   if (path === "/decisions" && method === "GET") {
-    return listDecisions(context.request, db);
+    return listOwnedDecisions(context.request, db, identity.subject);
   }
 
   if (path === "/decisions" && method === "POST") {
-    return createDecision(context.request, db);
+    return createOwnedDecision(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/decisions/") && method === "PATCH") {
+    const decisionId = decodeURIComponent(path.slice("/decisions/".length));
+    return updateOwnedDecision(context.request, db, identity.subject, decisionId);
   }
 
   return notFound();
