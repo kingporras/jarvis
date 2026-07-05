@@ -15,6 +15,11 @@ import {
   updateMemory as updateOwnedMemory,
 } from "../lib/memory";
 import {
+  createPerson as createOwnedPerson,
+  listPersons as listOwnedPersons,
+  updatePerson as updateOwnedPerson,
+} from "../lib/persons";
+import {
   createProject as createOwnedProject,
   listProjects as listOwnedProjects,
   updateProject as updateOwnedProject,
@@ -363,6 +368,19 @@ async function route(context: PagesContext): Promise<Response> {
   if (path.startsWith("/decisions/") && method === "PATCH") {
     const decisionId = decodeURIComponent(path.slice("/decisions/".length));
     return updateOwnedDecision(context.request, db, identity.subject, decisionId);
+  }
+
+  if (path === "/persons" && method === "GET") {
+    return listOwnedPersons(context.request, db, identity.subject);
+  }
+
+  if (path === "/persons" && method === "POST") {
+    return createOwnedPerson(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/persons/") && method === "PATCH") {
+    const personId = decodeURIComponent(path.slice("/persons/".length));
+    return updateOwnedPerson(context.request, db, identity.subject, personId);
   }
 
   return notFound();
