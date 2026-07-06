@@ -24,6 +24,11 @@ import {
   listProjects as listOwnedProjects,
   updateProject as updateOwnedProject,
 } from "../lib/projects";
+import {
+  createReminder as createOwnedReminder,
+  listReminders as listOwnedReminders,
+  updateReminder as updateOwnedReminder,
+} from "../lib/reminders";
 import { error, HttpError, json, notFound, success } from "../lib/responses";
 import {
   createTask as createOwnedTask,
@@ -381,6 +386,19 @@ async function route(context: PagesContext): Promise<Response> {
   if (path.startsWith("/persons/") && method === "PATCH") {
     const personId = decodeURIComponent(path.slice("/persons/".length));
     return updateOwnedPerson(context.request, db, identity.subject, personId);
+  }
+
+  if (path === "/reminders" && method === "GET") {
+    return listOwnedReminders(context.request, db, identity.subject);
+  }
+
+  if (path === "/reminders" && method === "POST") {
+    return createOwnedReminder(context.request, db, identity.subject);
+  }
+
+  if (path.startsWith("/reminders/") && method === "PATCH") {
+    const reminderId = decodeURIComponent(path.slice("/reminders/".length));
+    return updateOwnedReminder(context.request, db, identity.subject, reminderId);
   }
 
   return notFound();
