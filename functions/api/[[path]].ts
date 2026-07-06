@@ -5,6 +5,7 @@ import {
   listDecisions as listOwnedDecisions,
   updateDecision as updateOwnedDecision,
 } from "../lib/decisions";
+import { getExecutiveBriefing } from "../lib/dashboardBriefing";
 import {
   createMemoryLink as createOwnedMemoryLink,
   createMemory as createOwnedMemory,
@@ -294,6 +295,10 @@ async function route(context: PagesContext): Promise<Response> {
   }
 
   const db = getDb(context.env);
+
+  if (path === "/dashboard/briefing" && method === "GET") {
+    return getExecutiveBriefing(db, identity.subject);
+  }
 
   if (path === "/dashboard" && method === "GET") {
     return handleDashboard(db);
