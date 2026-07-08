@@ -6,6 +6,7 @@ import {
   updateDecision as updateOwnedDecision,
 } from "../lib/decisions";
 import { getExecutiveBriefing } from "../lib/dashboardBriefing";
+import { getJsonExport } from "../lib/jsonExport";
 import {
   createMemoryLink as createOwnedMemoryLink,
   createMemory as createOwnedMemory,
@@ -298,6 +299,10 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (path === "/dashboard/briefing" && method === "GET") {
     return getExecutiveBriefing(db, identity.subject);
+  }
+
+  if (path === "/export/json" && method === "GET") {
+    return getJsonExport(db, identity.subject);
   }
 
   if (path === "/dashboard" && method === "GET") {

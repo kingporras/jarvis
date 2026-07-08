@@ -1076,6 +1076,34 @@ button.project-summary-card {
   gap: var(--space-3);
 }
 
+.settings-copy {
+  max-width: 48rem;
+  margin: 0;
+  color: var(--color-text-soft);
+}
+
+.settings-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-feedback {
+  margin: 0;
+  border: 1px solid rgba(155, 207, 159, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(155, 207, 159, 0.08);
+  color: var(--color-text-soft);
+  padding: var(--space-3);
+}
+
+.settings-feedback--error {
+  border-color: rgba(240, 140, 124, 0.3);
+  background: rgba(240, 140, 124, 0.08);
+}
+
 .project-row,
 .settings-row {
   display: flex;
