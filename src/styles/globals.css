@@ -1073,6 +1073,7 @@ button.project-summary-card {
 .settings-list,
 .message-list {
   display: grid;
+  min-width: 0;
   gap: var(--space-3);
 }
 
@@ -1121,16 +1122,22 @@ button.project-summary-card {
 }
 
 .message {
+  min-width: 0;
   max-width: 42rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: rgba(12, 18, 25, 0.7);
   padding: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
-.message--jarvis,
-.message:nth-child(2) {
+.message--victor {
   margin-left: auto;
+  border-color: rgba(228, 189, 115, 0.28);
+  background: var(--color-amber-soft);
+}
+
+.message--jarvis {
   border-color: rgba(99, 214, 197, 0.22);
   background: var(--color-accent-soft);
 }
@@ -1142,9 +1149,14 @@ button.project-summary-card {
 .message p {
   margin: var(--space-2) 0 0;
   color: var(--color-text-soft);
+  white-space: pre-wrap;
 }
 
 .suggested-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-4);
 }
@@ -1169,6 +1181,17 @@ button.project-summary-card {
 .chat-input-row input:focus {
   border-color: rgba(99, 214, 197, 0.48);
   box-shadow: 0 0 0 3px rgba(99, 214, 197, 0.2);
+}
+
+.chat-input-row .button {
+  white-space: nowrap;
+}
+
+.chat-context-tags {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 .filter-board {

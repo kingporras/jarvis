@@ -21,6 +21,9 @@ export interface Env {
   CLOUDFLARE_ACCESS_AUDS?: string;
   CLOUDFLARE_ACCESS_TEAM_DOMAIN?: string;
   DB?: D1Database;
+  OPENAI_API_KEY?: string;
+  OPENAI_MAX_OUTPUT_TOKENS?: string;
+  OPENAI_MODEL?: string;
 }
 
 export interface PagesContext {

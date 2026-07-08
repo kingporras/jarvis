@@ -5,6 +5,7 @@ import {
   listDecisions as listOwnedDecisions,
   updateDecision as updateOwnedDecision,
 } from "../lib/decisions";
+import { getContextualChatResponse } from "../lib/contextualChat";
 import { getExecutiveBriefing } from "../lib/dashboardBriefing";
 import { getJsonExport } from "../lib/jsonExport";
 import {
@@ -299,6 +300,10 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (path === "/dashboard/briefing" && method === "GET") {
     return getExecutiveBriefing(db, identity.subject);
+  }
+
+  if (path === "/chat/context" && method === "POST") {
+    return getContextualChatResponse(context.request, db, identity.subject, context.env);
   }
 
   if (path === "/export/json" && method === "GET") {
