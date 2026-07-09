@@ -1,55 +1,99 @@
 # JARVIS v1 - Closure
 
-## Incluido en v1
+## Que incluye JARVIS v1
 
-JARVIS v1 incluye datos privados reales en Cloudflare D1 para proyectos, tareas, memoria, decisiones, personas y recordatorios. Tambien incluye Dashboard briefing, Chat contextual con OpenAI desde backend, propuestas de accion, ejecucion aprobada por humano, historial de acciones y exportacion JSON privada.
+- PWA privada.
+- Cloudflare Access.
+- Cloudflare D1.
+- Proyectos.
+- Tareas.
+- Memoria.
+- Decisiones.
+- Personas.
+- Recordatorios.
+- Dashboard real.
+- Ajustes reales.
+- Export JSON.
+- Chat contextual con OpenAI.
+- Propuestas de accion.
+- Aprobacion humana.
+- Ejecucion controlada.
+- Auditoria.
+- Historial de acciones.
 
-## No incluido en v1
+## Que no incluye v1
 
-JARVIS v1 no incluye importacion Obsidian, sincronizacion JANUS/Raspberry, sincronizacion Lenovo local, voz, email, calendario, notificaciones, RAG, Vectorize, embeddings, Workers AI, AI Gateway, streaming, adjuntos ni automatizaciones avanzadas.
+- Obsidian conectado.
+- JANUS/Raspberry conectado.
+- Lenovo local conectado.
+- Voz.
+- Gmail.
+- Calendar.
+- RAG/Vectorize.
+- Workers AI.
+- AI Gateway.
+- Automatizaciones avanzadas.
+- Historial persistente de conversaciones.
+- Agentes autonomos.
 
 ## Arquitectura actual
 
-- Frontend React servido por Cloudflare Pages.
-- Functions privadas en `functions/api/[[path]].ts`.
-- Cloudflare Access como puerta de acceso humano.
+- Frontend React/Vite servido como PWA privada.
+- Cloudflare Pages para hosting.
+- Pages Functions en `functions/api/[[path]].ts`.
+- Cloudflare Access para acceso humano y validacion inicial.
 - Cloudflare D1 como base de datos privada.
-- OpenAI API llamada solo desde backend.
-- Auditoria de acciones en `action_executions`.
+- OpenAI API desde backend, nunca desde el navegador.
+- `owner_subject` por `identity.subject`, derivado exclusivamente en backend.
 
 ## Flujo de datos
 
-El frontend llama a `/api/*`. El router valida Access, obtiene `identity.subject` y pasa ese owner al modulo correspondiente. Las consultas D1 filtran por `owner_subject` desde backend. El frontend nunca envia ni recibe `owner_subject`, JWT, claims, API keys ni secretos.
+El frontend llama a rutas `/api/*`. El router valida Access con `requireAccess()`, obtiene `identity.subject` y entrega ese owner a los modulos de datos. Las consultas D1 filtran por `owner_subject`; el frontend no envia ni recibe ese valor.
 
-## Flujo Chat a auditoria
+## Flujo principal
 
-1. `/api/chat/context` lee contexto D1 privado y llama a OpenAI desde backend.
-2. La respuesta puede incluir propuestas de accion en vista previa.
-3. El usuario confirma una propuesta en Chat.
-4. `/api/actions/execute` valida aprobacion, tipo y payload permitido.
-5. El backend ejecuta la mutacion D1 permitida.
-6. El resultado o fallo controlado se registra en `action_executions`.
-7. `/api/actions/history` y `/api/export/json` exponen solo auditoria segura.
+```text
+Chat
+-> contexto real
+-> respuesta IA
+-> propuesta de accion
+-> aprobacion humana
+-> validacion backend
+-> escritura D1
+-> auditoria
+-> historial
+```
 
 ## Endpoints principales
 
 - `GET /api/health`
 - `GET /api/dashboard/briefing`
+- `GET /api/export/json`
 - `POST /api/chat/context`
 - `POST /api/actions/execute`
 - `GET /api/actions/history`
-- `GET /api/export/json`
-- CRUD privado de proyectos, tareas, memoria, decisiones, personas y recordatorios.
+
+Modulos existentes:
+
+- `/api/projects`
+- `/api/tasks`
+- `/api/memory`
+- `/api/decisions`
+- `/api/persons`
+- `/api/reminders`
 
 ## Seguridad
 
-- Cloudflare Access protege rutas privadas.
-- D1 se filtra por `owner_subject`.
-- OpenAI API solo vive en backend.
+- Cloudflare Access protege la app.
+- `requireAccess()` valida rutas privadas en backend.
+- `owner_subject` nunca llega desde frontend.
+- OpenAI API key solo vive en backend.
 - Las acciones requieren aprobacion humana explicita.
-- No se usa sesion ChatGPT Plus.
-- No se usan cookies personales para OpenAI.
-- Export e historial no devuelven `owner_subject`, JWT, email, claims, payload completo, result completo ni secretos.
+- La auditoria no expone secretos.
+- Export JSON es privado, filtrado por owner y usa `Cache-Control: no-store`.
+- Export e historial no devuelven JWT, email, claims, API keys, payload completo ni result completo.
+- JARVIS v1 no usa ChatGPT Plus como API ni cookies personales.
+- JANUS/Lenovo permanecen aislados sin credenciales Cloud.
 
 ## Variables OpenAI necesarias
 
@@ -57,21 +101,22 @@ El frontend llama a `/api/*`. El router valida Access, obtiene `identity.subject
 - `OPENAI_MODEL`
 - `OPENAI_MAX_OUTPUT_TOKENS` opcional
 
-No documentar valores reales en el repositorio.
+No incluir secretos ni valores reales en el repositorio.
 
 ## Limites actuales
 
 - No hay historial persistente de conversaciones.
-- Las propuestas dependen del contrato JSON del modelo y se validan antes de mostrarse o ejecutar.
+- No hay agentes autonomos.
 - Las acciones ejecutables estan limitadas a `create_task`, `save_memory`, `create_decision`, `create_reminder` y `update_task_status`.
-- La auditoria exportada es intencionalmente minima y no incluye payload/result completo.
-- Las pruebas de produccion requieren sesion Cloudflare Access real.
+- La auditoria exportada es minima y no incluye `payload_json` ni `result_json` completos.
+- Las pruebas completas de produccion requieren sesion Cloudflare Access real.
 
-## Siguientes sprints v1.5 sugeridos
+## Proximos sprints v1.5 sugeridos
 
-- Importacion Obsidian controlada.
-- Busqueda y filtros de auditoria.
-- Hardening de pruebas end-to-end en produccion.
-- Mejoras de recuperacion ante errores OpenAI.
-- Backups/export programado con aprobacion explicita.
-- Preparacion de RAG/Vectorize como diseno, sin activar ingestion automatica.
+- Obsidian import manual.
+- JANUS bridge controlado.
+- Voz push-to-talk.
+- Gmail/Calendar bajo aprobacion.
+- RAG/Vectorize si hay volumen real.
+- AI Gateway para coste/observabilidad.
+- Backups/export programado.

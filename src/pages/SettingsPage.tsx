@@ -38,16 +38,18 @@ const pendingCapabilities = [
   "Email/Calendar",
   "RAG/Vectorize",
   "Automatizaciones avanzadas",
+  "Historial persistente de conversaciones",
 ];
 
 const securityStatus = [
   "Cloudflare Access para acceso humano",
-  "D1 privado",
-  "OpenAI API solo en backend",
-  "Acciones solo con aprobacion humana",
+  "Cloudflare D1 como base de datos privada",
+  "OpenAI API solo desde backend",
+  "Acciones solo con aprobacion humana explicita",
   "Auditoria en action_executions",
-  "Sin sesion ChatGPT Plus",
+  "Sin uso de ChatGPT Plus como API",
   "Sin cookies personales",
+  "Sin credenciales Cloud en JANUS/Lenovo",
 ];
 
 function exportFileName(exportedAt: string): string {

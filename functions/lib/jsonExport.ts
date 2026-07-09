@@ -114,7 +114,8 @@ interface ActionExecutionRow {
   created_at: string;
 }
 
-const FORBIDDEN_TEXT = /\b(owner_subject|jwt|claims|api[_ -]?key|secret|token|prompt|email)\b/gi;
+const FORBIDDEN_TEXT =
+  /\b(owner_subject|jwt|claims|api[_ -]?key|secret|token|prompt|email|config(?:uracion)?(?: interna)?)\b/gi;
 const EMAIL_TEXT = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
 function noStore(): HeadersInit {
