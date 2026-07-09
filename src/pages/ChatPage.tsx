@@ -7,6 +7,7 @@ import { SectionHeader } from "../components/ui/SectionHeader";
 import {
   isContextualChatError,
   sendContextualChatMessage,
+  type ActionProposal,
   type ChatMode,
   type ContextualChatResponse,
   type ContextStats,
@@ -16,6 +17,7 @@ import {
 type ChatAuthor = "Victor" | "JARVIS";
 
 interface LocalMessage {
+  actionProposals?: ActionProposal[];
   author: ChatAuthor;
   id: string;
   text: string;
@@ -66,6 +68,36 @@ const contextStatLabels: Record<keyof ContextStats, string> = {
   decisions: "Decisiones",
   persons: "Personas",
   reminders: "Recordatorios",
+};
+
+const proposalTypeLabels: Record<ActionProposal["type"], string> = {
+  create_task: "Crear tarea",
+  save_memory: "Guardar memoria",
+  create_decision: "Crear decision",
+  create_reminder: "Crear recordatorio",
+  update_task_status: "Actualizar tarea",
+};
+
+const proposalConfidenceLabels: Record<ActionProposal["confidence"], string> = {
+  low: "Confianza baja",
+  medium: "Confianza media",
+  high: "Confianza alta",
+};
+
+const proposalPayloadLabels: Record<string, string> = {
+  content: "Contenido",
+  context: "Contexto",
+  dueAt: "Fecha limite",
+  newStatus: "Nuevo estado",
+  notes: "Notas",
+  options: "Opciones",
+  priority: "Prioridad",
+  projectHint: "Proyecto",
+  reason: "Motivo",
+  reviewDueAt: "Revision",
+  taskHint: "Tarea",
+  title: "Titulo",
+  type: "Tipo",
 };
 
 function newMessageId(author: ChatAuthor): string {
@@ -123,6 +155,71 @@ function formatLatency(value: number | null): string {
   }
 
   return `${(value / 1000).toFixed(1)} s`;
+}
+
+function formatProposalPayloadValue(key: string, value: string | null): string {
+  if (!value) {
+    return "Sin definir";
+  }
+
+  if (key.endsWith("At")) {
+    const date = new Date(value);
+
+    if (!Number.isNaN(date.getTime())) {
+      return new Intl.DateTimeFormat("es-ES", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+    }
+  }
+
+  return value;
+}
+
+function proposalPayloadLabel(key: string): string {
+  return proposalPayloadLabels[key] ?? key.replace(/([A-Z])/g, " $1").toLowerCase();
+}
+
+function ActionProposalPreview({ proposal }: { proposal: ActionProposal }) {
+  return (
+    <article className="action-proposal-card">
+      <div className="action-proposal-card__header">
+        <div>
+          <span>{proposalTypeLabels[proposal.type]}</span>
+          <h3>{proposal.title}</h3>
+        </div>
+        <div className="action-proposal-card__badges">
+          <Badge tone="warning">Vista previa</Badge>
+          <Badge tone={proposal.confidence === "high" ? "success" : "info"}>
+            {proposalConfidenceLabels[proposal.confidence]}
+          </Badge>
+        </div>
+      </div>
+
+      <p>{proposal.summary}</p>
+
+      <dl className="action-proposal-card__payload">
+        {Object.entries(proposal.payload).map(([key, value]) => (
+          <div key={key}>
+            <dt>{proposalPayloadLabel(key)}</dt>
+            <dd>{formatProposalPayloadValue(key, value)}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {proposal.warnings.length > 0 ? (
+        <ul className="action-proposal-card__warnings" aria-label="Avisos de la propuesta">
+          {proposal.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <Button disabled type="button" variant="ghost">
+        Aprobación disponible en Sprint 11.2
+      </Button>
+    </article>
+  );
 }
 
 export function ChatPage() {
@@ -186,6 +283,7 @@ export function ChatPage() {
       setMessages((currentMessages) => [
         ...currentMessages,
         {
+          actionProposals: response.actionProposals,
           author: "JARVIS",
           id: newMessageId("JARVIS"),
           text: response.answer,
@@ -229,6 +327,16 @@ export function ChatPage() {
               >
                 <strong>{message.author}</strong>
                 <p>{message.text}</p>
+                {message.author === "JARVIS" && message.actionProposals?.length ? (
+                  <div className="action-proposal-list" aria-label="Propuestas de accion en vista previa">
+                    <div className="action-proposal-list__notice">
+                      Vista previa: todavía no se ejecuta ninguna acción.
+                    </div>
+                    {message.actionProposals.map((proposal) => (
+                      <ActionProposalPreview key={proposal.id} proposal={proposal} />
+                    ))}
+                  </div>
+                ) : null}
               </article>
             ))}
           </div>

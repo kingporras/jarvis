@@ -1152,6 +1152,127 @@ button.project-summary-card {
   white-space: pre-wrap;
 }
 
+.action-proposal-list {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.action-proposal-list__notice {
+  border: 1px solid rgba(228, 189, 115, 0.28);
+  border-radius: var(--radius-md);
+  background: rgba(228, 189, 115, 0.08);
+  color: var(--color-text-soft);
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: var(--space-3);
+}
+
+.action-proposal-card {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  border: 1px solid rgba(99, 214, 197, 0.22);
+  border-radius: var(--radius-md);
+  background: rgba(5, 6, 8, 0.22);
+  padding: var(--space-4);
+}
+
+.action-proposal-card__header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.action-proposal-card__header > div:first-child {
+  display: grid;
+  min-width: min(100%, 12rem);
+  gap: var(--space-1);
+}
+
+.action-proposal-card__header span {
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.action-proposal-card h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.action-proposal-card__badges {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.action-proposal-card p {
+  margin: 0;
+  color: var(--color-text-soft);
+  white-space: normal;
+}
+
+.action-proposal-card__payload {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.action-proposal-card__payload div {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(148, 163, 184, 0.06);
+  padding: var(--space-2);
+}
+
+.action-proposal-card__payload dt {
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.action-proposal-card__payload dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-soft);
+  font-size: 0.86rem;
+  overflow-wrap: anywhere;
+}
+
+.action-proposal-card__warnings {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--color-amber);
+  font-size: 0.86rem;
+}
+
+.action-proposal-card .button {
+  width: fit-content;
+  max-width: 100%;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  white-space: normal;
+}
+
 .suggested-prompts {
   display: flex;
   flex-wrap: wrap;

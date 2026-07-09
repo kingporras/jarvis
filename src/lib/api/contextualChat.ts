@@ -28,7 +28,29 @@ export interface ContextStats {
   reminders: number;
 }
 
+export type ActionProposalType =
+  | "create_task"
+  | "save_memory"
+  | "create_decision"
+  | "create_reminder"
+  | "update_task_status";
+
+export type ProposalConfidence = "low" | "medium" | "high";
+
+export interface ActionProposal {
+  id: string;
+  type: ActionProposalType;
+  title: string;
+  summary: string;
+  confidence: ProposalConfidence;
+  requiresApproval: true;
+  status: "preview_only";
+  payload: Record<string, string | null>;
+  warnings: string[];
+}
+
 export interface ContextualChatResponse {
+  actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
   generatedAt: string;
