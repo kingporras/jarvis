@@ -1187,11 +1187,57 @@ button.project-summary-card {
   white-space: nowrap;
 }
 
+.chat-input-row__limit {
+  grid-column: 1 / -1;
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  text-align: right;
+}
+
 .chat-context-tags {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.chat-meta-grid,
+.chat-stat-grid {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-2);
+}
+
+.chat-meta-grid div,
+.chat-stat-grid div {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(5, 6, 8, 0.24);
+  padding: var(--space-3);
+}
+
+.chat-meta-grid span,
+.chat-stat-grid span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.chat-meta-grid strong,
+.chat-stat-grid strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-soft);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.chat-stat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .filter-board {

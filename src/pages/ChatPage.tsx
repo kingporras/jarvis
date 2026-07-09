@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -9,6 +9,7 @@ import {
   sendContextualChatMessage,
   type ChatMode,
   type ContextualChatResponse,
+  type ContextStats,
   type UsedContext,
 } from "../lib/api/contextualChat";
 
@@ -34,6 +35,8 @@ const initialFollowUps = [
   "Que riesgos ves en los datos actuales?",
 ];
 
+const MAX_MESSAGE_LENGTH = 2_000;
+
 const modeLabels: Record<ChatMode, string> = {
   priorities: "Prioridades",
   projects: "Proyectos",
@@ -54,6 +57,15 @@ const contextLabels: Record<keyof UsedContext, string> = {
   persons: "Personas",
   reminders: "Recordatorios",
   links: "Enlaces",
+};
+
+const contextStatLabels: Record<keyof ContextStats, string> = {
+  projects: "Proyectos",
+  tasks: "Tareas",
+  memory: "Memoria",
+  decisions: "Decisiones",
+  persons: "Personas",
+  reminders: "Recordatorios",
 };
 
 function newMessageId(author: ChatAuthor): string {
@@ -77,16 +89,40 @@ function userErrorMessage(error: unknown): string {
       return "OpenAI no esta configurado en el backend. Falta definir la clave o el modelo.";
     }
 
+    if (error.code === "AI_REQUEST_FAILED" || error.code === "AI_EMPTY_RESPONSE" || error.status === 502) {
+      return "OpenAI no pudo responder. Revisa modelo, clave o disponibilidad del servicio.";
+    }
+
     if (error.status === 401 || error.status === 403) {
       return "La sesion privada no esta validada para este chat.";
     }
 
     if (error.status === 400) {
-      return "Revisa el mensaje y vuelve a enviarlo.";
+      if (error.code === "message is too long") {
+        return `El mensaje supera ${MAX_MESSAGE_LENGTH.toLocaleString("es-ES")} caracteres. Acortalo y vuelve a enviarlo.`;
+      }
+
+      if (error.code === "message is required") {
+        return "Escribe una pregunta para JARVIS.";
+      }
+
+      return "El mensaje no es valido para este chat.";
     }
   }
 
   return "No se pudo generar la respuesta. Vuelve a intentarlo.";
+}
+
+function formatLatency(value: number | null): string {
+  if (typeof value !== "number") {
+    return "Sin respuesta";
+  }
+
+  if (value < 1000) {
+    return `${value} ms`;
+  }
+
+  return `${(value / 1000).toFixed(1)} s`;
 }
 
 export function ChatPage() {
@@ -95,6 +131,7 @@ export function ChatPage() {
   const [messages, setMessages] = useState<LocalMessage[]>(initialMessages);
   const [sending, setSending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ContextualChatResponse | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const followUps = lastResponse?.suggestedFollowUps.length
     ? lastResponse.suggestedFollowUps
@@ -105,6 +142,16 @@ export function ChatPage() {
       )
     : [];
 
+  useEffect(() => {
+    if (messages.length === initialMessages.length && !error) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      formRef.current?.scrollIntoView({ block: "nearest" });
+    });
+  }, [error, messages.length]);
+
   async function submitMessage(rawMessage: string): Promise<void> {
     const message = rawMessage.trim();
 
@@ -114,6 +161,11 @@ export function ChatPage() {
 
     if (!message) {
       setError("Escribe una pregunta para JARVIS.");
+      return;
+    }
+
+    if (message.length > MAX_MESSAGE_LENGTH) {
+      setError(`El mensaje supera ${MAX_MESSAGE_LENGTH.toLocaleString("es-ES")} caracteres. Acortalo y vuelve a enviarlo.`);
       return;
     }
 
@@ -201,10 +253,12 @@ export function ChatPage() {
             ))}
           </div>
 
-          <form className="chat-input-row" onSubmit={handleSubmit}>
+          <form className="chat-input-row" onSubmit={handleSubmit} ref={formRef}>
             <input
               aria-label="Mensaje para JARVIS"
+              aria-describedby="chat-input-limit"
               disabled={sending}
+              maxLength={MAX_MESSAGE_LENGTH + 200}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="Pregunta por prioridades, proyectos o memoria..."
               value={draft}
@@ -212,6 +266,9 @@ export function ChatPage() {
             <Button disabled={sending} type="submit" variant="primary">
               {sending ? "Enviando" : "Enviar"}
             </Button>
+            <span className="chat-input-row__limit" id="chat-input-limit">
+              {draft.trim().length}/{MAX_MESSAGE_LENGTH}
+            </span>
           </form>
         </Card>
 
@@ -225,6 +282,24 @@ export function ChatPage() {
           </Card>
 
           <Card className="panel">
+            <SectionHeader eyebrow="Observabilidad" title="Respuesta" />
+            <div className="chat-meta-grid">
+              <div>
+                <span>Modelo</span>
+                <strong>{lastResponse?.model ?? "Sin respuesta"}</strong>
+              </div>
+              <div>
+                <span>Latencia</span>
+                <strong>{formatLatency(lastResponse?.latencyMs ?? null)}</strong>
+              </div>
+              <div>
+                <span>Request</span>
+                <strong>{lastResponse?.requestId ?? "Sin respuesta"}</strong>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="panel">
             <SectionHeader eyebrow="Fuentes usadas" title="Contexto" />
             <div className="chat-context-tags">
               {activeContext.length > 0 ? (
@@ -235,6 +310,24 @@ export function ChatPage() {
                 ))
               ) : (
                 <Badge tone="neutral">Sin fuentes aun</Badge>
+              )}
+            </div>
+          </Card>
+
+          <Card className="panel">
+            <SectionHeader eyebrow="Contexto" title="Registros usados" />
+            <div className="chat-stat-grid">
+              {lastResponse ? (
+                (Object.entries(lastResponse.contextStats) as [keyof ContextStats, number][]).map(
+                  ([key, value]) => (
+                    <div key={key}>
+                      <span>{contextStatLabels[key]}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ),
+                )
+              ) : (
+                <p>Sin consulta todavia.</p>
               )}
             </div>
           </Card>

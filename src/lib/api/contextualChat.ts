@@ -19,10 +19,23 @@ export interface UsedContext {
   links: boolean;
 }
 
+export interface ContextStats {
+  projects: number;
+  tasks: number;
+  memory: number;
+  decisions: number;
+  persons: number;
+  reminders: number;
+}
+
 export interface ContextualChatResponse {
   answer: string;
+  contextStats: ContextStats;
   generatedAt: string;
+  latencyMs: number;
   mode: ChatMode;
+  model: string;
+  requestId: string;
   suggestedFollowUps: string[];
   usedContext: UsedContext;
 }

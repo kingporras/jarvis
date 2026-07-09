@@ -240,6 +240,14 @@
     grid-template-columns: 1fr;
   }
 
+  .chat-workspace {
+    padding-bottom: 5rem;
+  }
+
+  .chat-input-row {
+    scroll-margin-bottom: 5rem;
+  }
+
   .today-card__metrics,
   .system-status-card__summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
