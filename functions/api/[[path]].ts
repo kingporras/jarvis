@@ -1,4 +1,5 @@
 import { accessErrorResponse, isAccessIdentity, requireAccess, type AccessIdentity } from "../lib/access";
+import { executeApprovedAction } from "../lib/actions";
 import { allRows, countRows, firstRow, getDb } from "../lib/db";
 import {
   createDecision as createOwnedDecision,
@@ -304,6 +305,10 @@ async function route(context: PagesContext): Promise<Response> {
 
   if (path === "/chat/context" && method === "POST") {
     return getContextualChatResponse(context.request, db, identity.subject, context.env);
+  }
+
+  if (path === "/actions/execute" && method === "POST") {
+    return executeApprovedAction(context.request, db, identity.subject);
   }
 
   if (path === "/export/json" && method === "GET") {

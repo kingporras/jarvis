@@ -5,8 +5,10 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import {
+  executeApprovedActionProposal,
   isContextualChatError,
   sendContextualChatMessage,
+  type ActionExecutionResult,
   type ActionProposal,
   type ChatMode,
   type ContextualChatResponse,
@@ -20,7 +22,22 @@ interface LocalMessage {
   actionProposals?: ActionProposal[];
   author: ChatAuthor;
   id: string;
+  sourceRequestId?: string;
   text: string;
+}
+
+type ProposalUiStatus =
+  | "preview_only"
+  | "confirming"
+  | "executing"
+  | "executed"
+  | "failed"
+  | "needs_clarification";
+
+interface ProposalExecutionState {
+  error?: string;
+  result?: ActionExecutionResult;
+  status: ProposalUiStatus;
 }
 
 const initialMessages: LocalMessage[] = [
@@ -84,6 +101,15 @@ const proposalConfidenceLabels: Record<ActionProposal["confidence"], string> = {
   high: "Confianza alta",
 };
 
+const proposalStatusLabels: Record<ProposalUiStatus, string> = {
+  preview_only: "Vista previa",
+  confirming: "Confirmando",
+  executing: "Ejecutando",
+  executed: "Ejecutada",
+  failed: "Fallida",
+  needs_clarification: "Necesita aclaracion",
+};
+
 const proposalPayloadLabels: Record<string, string> = {
   content: "Contenido",
   context: "Contexto",
@@ -145,6 +171,34 @@ function userErrorMessage(error: unknown): string {
   return "No se pudo generar la respuesta. Vuelve a intentarlo.";
 }
 
+function actionExecutionErrorMessage(error: unknown): string {
+  if (isContextualChatError(error)) {
+    if (error.code === "TARGET_AMBIGUOUS" || error.status === 409) {
+      return "JARVIS necesita aclaracion: hay mas de una coincidencia posible.";
+    }
+
+    if (error.code === "TARGET_NOT_FOUND" || error.status === 404) {
+      return "No encontre el objetivo propio para ejecutar esta accion.";
+    }
+
+    if (
+      error.code === "APPROVAL_REQUIRED" ||
+      error.code === "INVALID_ACTION_PROPOSAL" ||
+      error.code === "INVALID_PAYLOAD" ||
+      error.code === "INVALID_ACTION_TYPE" ||
+      error.status === 400
+    ) {
+      return "La propuesta ya no es valida para ejecucion.";
+    }
+
+    if (error.status === 401 || error.status === 403) {
+      return "La sesion privada no esta validada para ejecutar acciones.";
+    }
+  }
+
+  return "No se pudo ejecutar la accion aprobada.";
+}
+
 function formatLatency(value: number | null): string {
   if (typeof value !== "number") {
     return "Sin respuesta";
@@ -180,7 +234,41 @@ function proposalPayloadLabel(key: string): string {
   return proposalPayloadLabels[key] ?? key.replace(/([A-Z])/g, " $1").toLowerCase();
 }
 
-function ActionProposalPreview({ proposal }: { proposal: ActionProposal }) {
+function proposalStatusTone(status: ProposalUiStatus): "neutral" | "info" | "success" | "warning" {
+  if (status === "executed") {
+    return "success";
+  }
+
+  if (status === "failed" || status === "needs_clarification") {
+    return "warning";
+  }
+
+  if (status === "confirming") {
+    return "info";
+  }
+
+  return "warning";
+}
+
+function ActionProposalPreview({
+  disabled,
+  onCancel,
+  onConfirm,
+  onStartConfirm,
+  proposal,
+  sourceRequestId,
+  state,
+}: {
+  disabled: boolean;
+  onCancel: (proposalId: string) => void;
+  onConfirm: (proposal: ActionProposal, sourceRequestId: string | null) => void;
+  onStartConfirm: (proposalId: string) => void;
+  proposal: ActionProposal;
+  sourceRequestId: string | null;
+  state: ProposalExecutionState;
+}) {
+  const status = state.status;
+
   return (
     <article className="action-proposal-card">
       <div className="action-proposal-card__header">
@@ -189,7 +277,7 @@ function ActionProposalPreview({ proposal }: { proposal: ActionProposal }) {
           <h3>{proposal.title}</h3>
         </div>
         <div className="action-proposal-card__badges">
-          <Badge tone="warning">Vista previa</Badge>
+          <Badge tone={proposalStatusTone(status)}>{proposalStatusLabels[status]}</Badge>
           <Badge tone={proposal.confidence === "high" ? "success" : "info"}>
             {proposalConfidenceLabels[proposal.confidence]}
           </Badge>
@@ -215,9 +303,52 @@ function ActionProposalPreview({ proposal }: { proposal: ActionProposal }) {
         </ul>
       ) : null}
 
-      <Button disabled type="button" variant="ghost">
-        Aprobación disponible en Sprint 11.2
-      </Button>
+      {status === "confirming" ? (
+        <div className="action-proposal-card__confirmation" role="alert">
+          <strong>Esto escribirá datos reales en JARVIS</strong>
+          <p>{proposal.summary}</p>
+          <div className="action-proposal-card__actions">
+            <Button
+              disabled={disabled}
+              onClick={() => onConfirm(proposal, sourceRequestId)}
+              type="button"
+              variant="primary"
+            >
+              Confirmar ejecución
+            </Button>
+            <Button disabled={disabled} onClick={() => onCancel(proposal.id)} type="button" variant="ghost">
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {state.result ? (
+        <div className="action-proposal-card__result" role="status">
+          <strong>{state.result.entity.title}</strong>
+          <span>
+            {state.result.entity.kind} creado/actualizado · {formatGeneratedAt(state.result.executedAt)}
+          </span>
+        </div>
+      ) : null}
+
+      {state.error ? (
+        <div className="action-proposal-card__error" role="alert">
+          {state.error}
+        </div>
+      ) : null}
+
+      {status === "preview_only" || status === "failed" || status === "needs_clarification" ? (
+        <Button disabled={disabled} onClick={() => onStartConfirm(proposal.id)} type="button" variant="secondary">
+          Aprobar y ejecutar
+        </Button>
+      ) : null}
+
+      {status === "executing" ? (
+        <Button disabled type="button" variant="ghost">
+          Ejecutando accion...
+        </Button>
+      ) : null}
     </article>
   );
 }
@@ -226,6 +357,7 @@ export function ChatPage() {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>(initialMessages);
+  const [proposalStates, setProposalStates] = useState<Record<string, ProposalExecutionState>>({});
   const [sending, setSending] = useState(false);
   const [lastResponse, setLastResponse] = useState<ContextualChatResponse | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -238,6 +370,7 @@ export function ChatPage() {
         ([, used]) => used,
       )
     : [];
+  const proposalExecuting = Object.values(proposalStates).some((state) => state.status === "executing");
 
   useEffect(() => {
     if (messages.length === initialMessages.length && !error) {
@@ -286,6 +419,7 @@ export function ChatPage() {
           actionProposals: response.actionProposals,
           author: "JARVIS",
           id: newMessageId("JARVIS"),
+          sourceRequestId: response.requestId,
           text: response.answer,
         },
       ]);
@@ -299,6 +433,62 @@ export function ChatPage() {
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
     void submitMessage(draft);
+  }
+
+  function proposalState(proposalId: string): ProposalExecutionState {
+    return proposalStates[proposalId] ?? { status: "preview_only" };
+  }
+
+  function startProposalConfirmation(proposalId: string): void {
+    if (proposalExecuting) {
+      return;
+    }
+
+    setProposalStates((currentStates) => ({
+      ...currentStates,
+      [proposalId]: { status: "confirming" },
+    }));
+  }
+
+  function cancelProposalConfirmation(proposalId: string): void {
+    setProposalStates((currentStates) => ({
+      ...currentStates,
+      [proposalId]: { status: "preview_only" },
+    }));
+  }
+
+  async function confirmProposalExecution(
+    proposal: ActionProposal,
+    sourceRequestId: string | null,
+  ): Promise<void> {
+    if (proposalExecuting) {
+      return;
+    }
+
+    setProposalStates((currentStates) => ({
+      ...currentStates,
+      [proposal.id]: { status: "executing" },
+    }));
+
+    try {
+      const result = await executeApprovedActionProposal(proposal, sourceRequestId);
+      setProposalStates((currentStates) => ({
+        ...currentStates,
+        [proposal.id]: { result, status: "executed" },
+      }));
+    } catch (caughtError) {
+      const status =
+        isContextualChatError(caughtError) && caughtError.status === 409
+          ? "needs_clarification"
+          : "failed";
+      setProposalStates((currentStates) => ({
+        ...currentStates,
+        [proposal.id]: {
+          error: actionExecutionErrorMessage(caughtError),
+          status,
+        },
+      }));
+    }
   }
 
   return (
@@ -333,7 +523,18 @@ export function ChatPage() {
                       Vista previa: todavía no se ejecuta ninguna acción.
                     </div>
                     {message.actionProposals.map((proposal) => (
-                      <ActionProposalPreview key={proposal.id} proposal={proposal} />
+                      <ActionProposalPreview
+                        disabled={proposalExecuting}
+                        key={proposal.id}
+                        onCancel={cancelProposalConfirmation}
+                        onConfirm={(selectedProposal, sourceRequestId) =>
+                          void confirmProposalExecution(selectedProposal, sourceRequestId)
+                        }
+                        onStartConfirm={startProposalConfirmation}
+                        proposal={proposal}
+                        sourceRequestId={message.sourceRequestId ?? null}
+                        state={proposalState(proposal.id)}
+                      />
                     ))}
                   </div>
                 ) : null}

@@ -49,6 +49,21 @@ export interface ActionProposal {
   warnings: string[];
 }
 
+export interface ActionExecutionEntity {
+  id: string;
+  kind: "task" | "memory" | "decision" | "reminder";
+  title: string;
+}
+
+export interface ActionExecutionResult {
+  actionId: string;
+  type: ActionProposalType;
+  status: "executed";
+  entity: ActionExecutionEntity;
+  warnings: string[];
+  executedAt: string;
+}
+
 export interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
@@ -101,4 +116,25 @@ export async function sendContextualChatMessage(message: string): Promise<Contex
   });
 
   return parseResponse<ContextualChatResponse>(response);
+}
+
+export async function executeApprovedActionProposal(
+  proposal: ActionProposal,
+  sourceRequestId: string | null,
+): Promise<ActionExecutionResult> {
+  const response = await fetch("/api/actions/execute", {
+    body: JSON.stringify({
+      approval: {
+        confirmed: true,
+        sourceRequestId,
+      },
+      proposal,
+    }),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  return parseResponse<ActionExecutionResult>(response);
 }
