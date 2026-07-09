@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
@@ -6,8 +6,10 @@ import { Card } from "../components/ui/Card";
 import { SectionHeader } from "../components/ui/SectionHeader";
 import {
   executeApprovedActionProposal,
+  fetchActionHistory,
   isContextualChatError,
   sendContextualChatMessage,
+  type ActionHistoryItem,
   type ActionExecutionResult,
   type ActionProposal,
   type ChatMode,
@@ -126,6 +128,11 @@ const proposalPayloadLabels: Record<string, string> = {
   type: "Tipo",
 };
 
+const actionHistoryStatusLabels: Record<ActionHistoryItem["status"], string> = {
+  executed: "Ejecutada",
+  failed: "Fallida",
+};
+
 function newMessageId(author: ChatAuthor): string {
   return `${author.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -174,17 +181,20 @@ function userErrorMessage(error: unknown): string {
 function actionExecutionErrorMessage(error: unknown): string {
   if (isContextualChatError(error)) {
     if (error.code === "TARGET_AMBIGUOUS" || error.status === 409) {
-      return "JARVIS necesita aclaracion: hay mas de una coincidencia posible.";
+      return "JARVIS encontró varias coincidencias. Necesito que concretes mejor el nombre o el ID antes de ejecutar.";
     }
 
     if (error.code === "TARGET_NOT_FOUND" || error.status === 404) {
-      return "No encontre el objetivo propio para ejecutar esta accion.";
+      return "No encontré una entidad propia que coincida con esa propuesta. Pide a JARVIS una propuesta más concreta.";
+    }
+
+    if (error.code === "INVALID_PAYLOAD") {
+      return "La propuesta no tiene datos suficientes o válidos para ejecutarse.";
     }
 
     if (
       error.code === "APPROVAL_REQUIRED" ||
       error.code === "INVALID_ACTION_PROPOSAL" ||
-      error.code === "INVALID_PAYLOAD" ||
       error.code === "INVALID_ACTION_TYPE" ||
       error.status === 400
     ) {
@@ -248,6 +258,18 @@ function proposalStatusTone(status: ProposalUiStatus): "neutral" | "info" | "suc
   }
 
   return "warning";
+}
+
+function actionHistoryStatusTone(status: ActionHistoryItem["status"]): "success" | "warning" {
+  return status === "executed" ? "success" : "warning";
+}
+
+function formatActionHistoryTarget(item: ActionHistoryItem): string | null {
+  if (!item.targetType && !item.targetId) {
+    return null;
+  }
+
+  return [item.targetType, item.targetId].filter(Boolean).join(" · ");
 }
 
 function ActionProposalPreview({
@@ -354,6 +376,9 @@ function ActionProposalPreview({
 }
 
 export function ChatPage() {
+  const [actionHistory, setActionHistory] = useState<ActionHistoryItem[]>([]);
+  const [actionHistoryError, setActionHistoryError] = useState<string | null>(null);
+  const [actionHistoryLoading, setActionHistoryLoading] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<LocalMessage[]>(initialMessages);
@@ -371,6 +396,24 @@ export function ChatPage() {
       )
     : [];
   const proposalExecuting = Object.values(proposalStates).some((state) => state.status === "executing");
+
+  const loadActionHistory = useCallback(async () => {
+    setActionHistoryLoading(true);
+    setActionHistoryError(null);
+
+    try {
+      const response = await fetchActionHistory(10);
+      setActionHistory(response.actions);
+    } catch {
+      setActionHistoryError("No se pudo cargar el historial de acciones.");
+    } finally {
+      setActionHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadActionHistory();
+  }, [loadActionHistory]);
 
   useEffect(() => {
     if (messages.length === initialMessages.length && !error) {
@@ -478,7 +521,8 @@ export function ChatPage() {
       }));
     } catch (caughtError) {
       const status =
-        isContextualChatError(caughtError) && caughtError.status === 409
+        isContextualChatError(caughtError) &&
+        (caughtError.status === 409 || caughtError.status === 404)
           ? "needs_clarification"
           : "failed";
       setProposalStates((currentStates) => ({
@@ -488,6 +532,8 @@ export function ChatPage() {
           status,
         },
       }));
+    } finally {
+      void loadActionHistory();
     }
   }
 
@@ -606,6 +652,53 @@ export function ChatPage() {
                 <strong>{lastResponse?.requestId ?? "Sin respuesta"}</strong>
               </div>
             </div>
+          </Card>
+
+          <Card className="panel action-history-panel">
+            <div className="action-history-panel__header">
+              <SectionHeader eyebrow="Acciones" title="Acciones recientes" />
+              <Button
+                disabled={actionHistoryLoading}
+                onClick={() => void loadActionHistory()}
+                type="button"
+                variant="ghost"
+              >
+                Actualizar historial
+              </Button>
+            </div>
+
+            {actionHistoryLoading ? (
+              <p className="action-history-panel__state">Cargando acciones...</p>
+            ) : actionHistoryError ? (
+              <div className="action-history-panel__error" role="alert">
+                <p>{actionHistoryError}</p>
+                <Button onClick={() => void loadActionHistory()} type="button" variant="secondary">
+                  Reintentar
+                </Button>
+              </div>
+            ) : actionHistory.length > 0 ? (
+              <ol className="action-history-list" aria-label="Acciones recientes">
+                {actionHistory.map((item) => (
+                  <li className="action-history-item" key={item.id}>
+                    <div className="action-history-item__header">
+                      <Badge tone={actionHistoryStatusTone(item.status)}>
+                        {actionHistoryStatusLabels[item.status]}
+                      </Badge>
+                      <span>{formatGeneratedAt(item.createdAt)}</span>
+                    </div>
+                    <strong>{proposalTypeLabels[item.actionType]}</strong>
+                    <p>{item.summary}</p>
+                    <div className="action-history-item__meta">
+                      {formatActionHistoryTarget(item) ? <span>{formatActionHistoryTarget(item)}</span> : null}
+                      {item.errorCode ? <span>{item.errorCode}</span> : null}
+                      {item.warnings[0] ? <span>{item.warnings[0]}</span> : null}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="action-history-panel__state">Sin acciones recientes.</p>
+            )}
           </Card>
 
           <Card className="panel">

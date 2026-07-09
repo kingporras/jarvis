@@ -64,6 +64,22 @@ export interface ActionExecutionResult {
   executedAt: string;
 }
 
+export interface ActionHistoryItem {
+  id: string;
+  actionType: ActionProposalType;
+  status: "executed" | "failed";
+  targetType: string | null;
+  targetId: string | null;
+  summary: string;
+  warnings: string[];
+  errorCode: string | null;
+  createdAt: string;
+}
+
+export interface ActionHistoryResponse {
+  actions: ActionHistoryItem[];
+}
+
 export interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
@@ -137,4 +153,13 @@ export async function executeApprovedActionProposal(
   });
 
   return parseResponse<ActionExecutionResult>(response);
+}
+
+export async function fetchActionHistory(limit = 10): Promise<ActionHistoryResponse> {
+  const clampedLimit = Math.min(Math.max(Math.trunc(limit), 1), 25);
+  const response = await fetch(`/api/actions/history?limit=${clampedLimit}`, {
+    method: "GET",
+  });
+
+  return parseResponse<ActionHistoryResponse>(response);
 }

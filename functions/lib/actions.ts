@@ -94,6 +94,18 @@ interface UpdateTaskStatusPayload {
   taskHint: string;
 }
 
+interface ActionHistoryRow {
+  id: string;
+  action_type: ActionType;
+  status: ActionStatus;
+  target_type: string | null;
+  target_id: string | null;
+  summary: string;
+  warnings_json: string | null;
+  error_code: string | null;
+  created_at: string;
+}
+
 type ValidatedPayload =
   | CreateTaskPayload
   | SaveMemoryPayload
@@ -271,6 +283,44 @@ function warningList(value: unknown): string[] {
     .map((warning) => stringValue(warning, "INVALID_ACTION_PROPOSAL", { maxLength: 180 }))
     .filter((warning): warning is string => Boolean(warning))
     .slice(0, 3);
+}
+
+function publicWarnings(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((warning): warning is string => typeof warning === "string")
+      .map((warning) => sanitizeText(warning.trim()))
+      .filter(Boolean)
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
+}
+
+function actionHistoryLimit(request: Request): number {
+  const rawLimit = new URL(request.url).searchParams.get("limit");
+
+  if (!rawLimit) {
+    return 10;
+  }
+
+  const parsed = Number.parseInt(rawLimit, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return 10;
+  }
+
+  return Math.min(Math.max(parsed, 1), 25);
 }
 
 function parseApproval(value: unknown): ApprovalInput {
@@ -765,6 +815,40 @@ function publicResult(
 
 function mergeWarnings(proposalWarnings: string[], executionWarnings: string[]): string[] {
   return Array.from(new Set([...proposalWarnings, ...executionWarnings])).slice(0, 6);
+}
+
+export async function listActionHistory(
+  request: Request,
+  db: D1Database,
+  ownerSubject: string,
+): Promise<Response> {
+  const limit = actionHistoryLimit(request);
+  const rows = await allRows<ActionHistoryRow>(
+    db,
+    `SELECT id, action_type, status, target_type, target_id, summary, warnings_json, error_code, created_at
+     FROM action_executions
+     WHERE owner_subject = ?
+     ORDER BY created_at DESC
+     LIMIT ?`,
+    [ownerSubject, limit],
+  );
+
+  return success(
+    {
+      actions: rows.map((row) => ({
+        id: row.id,
+        actionType: row.action_type,
+        status: row.status,
+        targetType: row.target_type,
+        targetId: row.target_id,
+        summary: sanitizeText(row.summary),
+        warnings: publicWarnings(row.warnings_json),
+        errorCode: row.error_code,
+        createdAt: row.created_at,
+      })),
+    },
+    { headers: noStore() },
+  );
 }
 
 export async function executeApprovedAction(
