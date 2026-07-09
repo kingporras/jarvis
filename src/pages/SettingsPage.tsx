@@ -9,9 +9,10 @@ import { fetchJarvisJsonExport } from "../lib/api/jsonExport";
 const systemStatus = [
   { label: "Acceso humano", value: "Cloudflare Access", tone: "success" as const },
   { label: "Base de datos", value: "Cloudflare D1", tone: "success" as const },
+  { label: "OpenAI", value: "Backend privado", tone: "success" as const },
+  { label: "Acciones", value: "Aprobacion humana", tone: "success" as const },
+  { label: "Auditoria", value: "action_executions", tone: "success" as const },
   { label: "Exportacion JSON", value: "Disponible", tone: "success" as const },
-  { label: "IA", value: "No conectada", tone: "neutral" as const },
-  { label: "Voz", value: "No conectada", tone: "neutral" as const },
 ];
 
 const activeModules = [
@@ -22,22 +23,31 @@ const activeModules = [
   "Personas",
   "Recordatorios",
   "Dashboard briefing",
+  "Chat contextual con OpenAI",
+  "Propuestas de accion",
+  "Ejecucion aprobada",
+  "Historial de acciones",
+  "Exportacion JSON",
 ];
 
 const pendingCapabilities = [
-  "Chat contextual",
-  "IA privada",
-  "RAG",
-  "Vectorize",
-  "Workers AI",
+  "Importacion Obsidian",
+  "JANUS/Raspberry sync",
+  "Lenovo local sync",
   "Voz",
-  "Importacion JSON",
-  "Backups automaticos",
+  "Email/Calendar",
+  "RAG/Vectorize",
+  "Automatizaciones avanzadas",
 ];
 
-const localNodes = [
-  { label: "JANUS/Raspberry", value: "Aislado, sin sync cloud" },
-  { label: "Lenovo local", value: "Aislado, sin sync cloud" },
+const securityStatus = [
+  "Cloudflare Access para acceso humano",
+  "D1 privado",
+  "OpenAI API solo en backend",
+  "Acciones solo con aprobacion humana",
+  "Auditoria en action_executions",
+  "Sin sesion ChatGPT Plus",
+  "Sin cookies personales",
 ];
 
 function exportFileName(exportedAt: string): string {
@@ -87,7 +97,7 @@ export function SettingsPage() {
   return (
     <div className="page-stack">
       <PageHeader
-        description="Estado actual del sistema privado y exportacion local de datos."
+        description="Estado real de JARVIS v1, seguridad y exportacion local de datos."
         eyebrow="Sistema"
         title="Ajustes"
       />
@@ -110,6 +120,21 @@ export function SettingsPage() {
 
       <Card className="panel">
         <SectionHeader
+          action={<Badge tone="success">Privado</Badge>}
+          eyebrow="Seguridad"
+          title="Controles activos"
+        />
+        <div className="summary-strip">
+          {securityStatus.map((control) => (
+            <Badge key={control} tone="info">
+              {control}
+            </Badge>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="panel">
+        <SectionHeader
           action={<Badge tone="info">{activeModules.length} activos</Badge>}
           eyebrow="D1 real"
           title="Modulos activos"
@@ -126,8 +151,8 @@ export function SettingsPage() {
       <Card className="panel">
         <SectionHeader
           action={<Badge tone="warning">Pendiente</Badge>}
-          eyebrow="Capacidades"
-          title="No conectadas todavia"
+          eyebrow="v1.5+"
+          title="Capacidades futuras"
         />
         <div className="summary-strip">
           {pendingCapabilities.map((capability) => (
@@ -143,7 +168,7 @@ export function SettingsPage() {
           title="Copia privada local"
         />
         <p className="settings-copy">
-          Incluye proyectos, tareas, memoria, enlaces de memoria, decisiones, personas y recordatorios del usuario autenticado.
+          Incluye proyectos, tareas, memoria, enlaces de memoria, decisiones, personas, recordatorios y auditoria segura de acciones del usuario autenticado.
         </p>
         <div className="settings-actions">
           <Button disabled={exporting} onClick={() => void handleExportJson()} variant="primary">
@@ -164,25 +189,9 @@ export function SettingsPage() {
       </Card>
 
       <Card className="panel">
-        <SectionHeader eyebrow="Nodos locales" title="Aislamiento actual" />
-        <div className="settings-list">
-          {localNodes.map((node) => (
-            <div className="settings-row" key={node.label}>
-              <span>{node.label}</span>
-              <strong>{node.value}</strong>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card className="panel">
-        <SectionHeader
-          action={<Badge tone="info">Proxima fase</Badge>}
-          eyebrow="Roadmap"
-          title="Chat contextual"
-        />
+        <SectionHeader action={<Badge tone="info">v1 cerrada</Badge>} eyebrow="Roadmap" title="Siguiente ciclo" />
         <p className="settings-copy">
-          La siguiente fase natural es conectar el Chat a contexto real sin activar IA autonoma, voz ni sincronizacion externa.
+          JARVIS v1 queda centrado en datos privados, Chat contextual, aprobacion humana y auditoria. Las integraciones externas y automatizaciones quedan fuera de v1.
         </p>
       </Card>
     </div>

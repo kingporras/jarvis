@@ -10,6 +10,7 @@ export interface JarvisJsonExport {
     decisions: unknown[];
     persons: unknown[];
     reminders: unknown[];
+    actionExecutions: unknown[];
   };
 }
 

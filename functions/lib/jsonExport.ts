@@ -100,8 +100,51 @@ interface ReminderRow {
   dismissed_at: string | null;
 }
 
+interface ActionExecutionRow {
+  id: string;
+  action_type: string;
+  source_request_id: string | null;
+  proposal_id: string | null;
+  status: string;
+  target_type: string | null;
+  target_id: string | null;
+  summary: string;
+  warnings_json: string | null;
+  error_code: string | null;
+  created_at: string;
+}
+
+const FORBIDDEN_TEXT = /\b(owner_subject|jwt|claims|api[_ -]?key|secret|token|prompt|email)\b/gi;
+const EMAIL_TEXT = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
+
 function noStore(): HeadersInit {
   return { "Cache-Control": "no-store" };
+}
+
+function sanitizeText(value: string): string {
+  return value.replace(FORBIDDEN_TEXT, "[redacted]").replace(EMAIL_TEXT, "[redacted]");
+}
+
+function toWarnings(value: string | null): string[] {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((warning): warning is string => typeof warning === "string")
+      .map((warning) => sanitizeText(warning.trim()))
+      .filter(Boolean)
+      .slice(0, 6);
+  } catch {
+    return [];
+  }
 }
 
 function toProject(row: ProjectRow) {
@@ -212,6 +255,22 @@ function toReminder(row: ReminderRow) {
   };
 }
 
+function toActionExecution(row: ActionExecutionRow) {
+  return {
+    id: row.id,
+    actionType: row.action_type,
+    sourceRequestId: row.source_request_id,
+    proposalId: row.proposal_id,
+    status: row.status,
+    targetType: row.target_type,
+    targetId: row.target_id,
+    summary: sanitizeText(row.summary),
+    warnings: toWarnings(row.warnings_json),
+    errorCode: row.error_code,
+    createdAt: row.created_at,
+  };
+}
+
 export async function getJsonExport(db: D1Database, ownerSubject: string): Promise<Response> {
   const [
     projectRows,
@@ -221,6 +280,7 @@ export async function getJsonExport(db: D1Database, ownerSubject: string): Promi
     decisionRows,
     personRows,
     reminderRows,
+    actionExecutionRows,
   ] = await Promise.all([
     allRows<ProjectRow>(
       db,
@@ -348,6 +408,25 @@ export async function getJsonExport(db: D1Database, ownerSubject: string): Promi
        ORDER BY updated_at DESC, id ASC`,
       [ownerSubject],
     ),
+    allRows<ActionExecutionRow>(
+      db,
+      `SELECT
+         id,
+         action_type,
+         source_request_id,
+         proposal_id,
+         status,
+         target_type,
+         target_id,
+         summary,
+         warnings_json,
+         error_code,
+         created_at
+       FROM action_executions
+       WHERE owner_subject = ?
+       ORDER BY created_at DESC, id ASC`,
+      [ownerSubject],
+    ),
   ]);
 
   return json(
@@ -363,6 +442,7 @@ export async function getJsonExport(db: D1Database, ownerSubject: string): Promi
         decisions: decisionRows.map(toDecision),
         persons: personRows.map(toPerson),
         reminders: reminderRows.map(toReminder),
+        actionExecutions: actionExecutionRows.map(toActionExecution),
       },
     },
     { headers: noStore() },
