@@ -12,6 +12,8 @@ type ChatMode =
   | "reminders"
   | "overview";
 
+type AiProvider = "workers-ai" | "openai" | "deterministic";
+
 type ActionProposalType =
   | "create_task"
   | "save_memory"
@@ -147,10 +149,12 @@ interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  fallbackUsed: boolean;
   generatedAt: string;
   latencyMs: number;
   mode: ChatMode;
   model: string;
+  provider: AiProvider;
   requestId: string;
   suggestedFollowUps: string[];
   usedContext: UsedContext;
@@ -178,9 +182,11 @@ type UnknownRecord = Record<string, unknown>;
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const ACTION_PROPOSALS_MARKER = "ACTION_PROPOSALS_JSON:";
 const DEFAULT_MAX_OUTPUT_TOKENS = 700;
+const DEFAULT_WORKERS_AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 const FALLBACK_EMPTY_AI_ANSWER = "No pude generar una respuesta textual segura.";
 const MAX_MESSAGE_LENGTH = 2_000;
 const OPENAI_TIMEOUT_MS = 20_000;
+const WORKERS_AI_TIMEOUT_MS = 20_000;
 const ACTION_PROPOSAL_TYPES = [
   "create_task",
   "save_memory",
@@ -352,6 +358,24 @@ function parseMaxOutputTokens(rawValue: string | undefined): number {
   }
 
   return Math.min(Math.max(parsed, 200), 1_200);
+}
+
+function configuredProvider(rawValue: string | undefined): AiProvider {
+  const provider = rawValue?.trim().toLowerCase();
+
+  if (provider === "workers-ai" || provider === "openai" || provider === "deterministic") {
+    return provider;
+  }
+
+  return "deterministic";
+}
+
+function workersAiModel(env: Env): string {
+  return env.WORKERS_AI_MODEL?.trim() || DEFAULT_WORKERS_AI_MODEL;
+}
+
+function openAiReady(env: Env): boolean {
+  return Boolean(env.OPENAI_API_KEY?.trim() && env.OPENAI_MODEL?.trim());
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -960,7 +984,9 @@ function newRequestId(): string {
     return crypto.randomUUID();
   }
 
-  return `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `chat_${Date.now().toString(36)}_${[...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 function systemInstructions(generatedAt: string): string {
@@ -972,7 +998,7 @@ function systemInstructions(generatedAt: string): string {
     "Distingue entre hechos, inferencias y sugerencias.",
     "No digas que has creado, editado, borrado, enviado o programado nada.",
     "No puedes modificar datos.",
-    "Las acciones reales requieren aprobacion humana y se implementaran en Sprint 11.2.",
+    "Las acciones reales requieren aprobacion humana explicita.",
     "Se concreto, practico y orientado a proximos pasos.",
     "Cuando la respuesta lo merezca, usa este formato: 1. Resumen, 2. Prioridad principal, 3. Riesgos o bloqueos, 4. Proximos pasos sugeridos.",
     "Para respuestas simples, responde de forma breve sin forzar secciones.",
@@ -1001,6 +1027,294 @@ function userInput(message: string, mode: ChatMode, context: ContextBundle): str
     "Contexto real de D1, acotado y ya filtrado por el propietario autenticado:",
     JSON.stringify(context),
   ].join("\n");
+}
+
+function compactText(value: string | null | undefined, maxLength = 180): string {
+  if (!value?.trim()) {
+    return "";
+  }
+
+  const compacted = value.replace(/\s+/g, " ").trim();
+  return compacted.length > maxLength ? `${compacted.slice(0, maxLength).trim()}...` : compacted;
+}
+
+function bulletList(items: string[]): string {
+  return items.length > 0 ? items.map((item) => `- ${item}`).join("\n") : "- No hay datos reales disponibles.";
+}
+
+function projectSearchTerms(message: string): string[] {
+  const normalized = normalizeSearchText(message);
+  const terms: string[] = [];
+
+  if (includesAny(normalized, ["janus", "raspberry", "piper", "ollama"])) {
+    terms.push("janus", "raspberry", "piper", "ollama");
+  }
+
+  if (includesAny(normalized, ["inter de verdun", "inter de verdun", "idv"])) {
+    terms.push("inter de verdun", "idv");
+  }
+
+  if (normalized.includes("okgreen")) {
+    terms.push("okgreen");
+  }
+
+  if (includesAny(normalized, ["lenovo", "ia local"])) {
+    terms.push("lenovo", "ia local");
+  }
+
+  if (normalized.includes("jarvis")) {
+    terms.push("jarvis");
+  }
+
+  if (includesAny(normalized, ["obsidian", "segundo cerebro"])) {
+    terms.push("obsidian", "segundo cerebro");
+  }
+
+  return terms;
+}
+
+function findProjectByTerms(context: ContextBundle, terms: string[]): ContextProjectRow | null {
+  if (terms.length === 0) {
+    return null;
+  }
+
+  return (
+    context.projects.find((project) => {
+      const searchable = normalizeSearchText([project.name, project.objective].filter(Boolean).join(" "));
+      return terms.some((term) => searchable.includes(term));
+    }) ?? null
+  );
+}
+
+function contextForProject(context: ContextBundle, project: ContextProjectRow): {
+  decisions: ContextDecisionRow[];
+  memory: ContextMemoryRow[];
+  tasks: ContextTaskRow[];
+} {
+  const projectName = normalizeSearchText(project.name);
+
+  return {
+    tasks: context.tasks.filter((task) => task.project_id === project.id || task.project_name === project.name),
+    memory: context.memory.filter((memory) =>
+      normalizeSearchText([memory.title, memory.content].join(" ")).includes(projectName.split(" ")[0] ?? projectName),
+    ),
+    decisions: context.decisions.filter(
+      (decision) => decision.project_id === project.id || decision.project_name === project.name,
+    ),
+  };
+}
+
+function projectAnswer(project: ContextProjectRow, related: ReturnType<typeof contextForProject>): string {
+  const lines = [
+    `Resumen de ${project.name}:`,
+    `- Estado: ${project.status}. Prioridad: ${project.priority}.`,
+  ];
+
+  const objective = compactText(project.objective, 220);
+  if (objective) {
+    lines.push(`- Objetivo: ${objective}`);
+  }
+
+  if (related.tasks.length > 0) {
+    lines.push(
+      "- Tareas abiertas:",
+      bulletList(
+        related.tasks.slice(0, 5).map((task) =>
+          `${task.priority} · ${task.title}${task.due_at ? ` · vence ${task.due_at}` : ""}`,
+        ),
+      ),
+    );
+  }
+
+  if (related.memory.length > 0) {
+    lines.push(
+      "- Memoria relacionada:",
+      bulletList(related.memory.slice(0, 4).map((memory) => `${memory.title}: ${compactText(memory.content, 140)}`)),
+    );
+  }
+
+  if (related.decisions.length > 0) {
+    lines.push(
+      "- Decisiones relacionadas:",
+      bulletList(related.decisions.slice(0, 4).map((decision) => `${decision.status} · ${decision.title}`)),
+    );
+  }
+
+  if (related.tasks.length === 0 && related.memory.length === 0 && related.decisions.length === 0) {
+    lines.push("- No encuentro tareas, memorias o decisiones vinculadas en el contexto acotado.");
+  }
+
+  return lines.join("\n");
+}
+
+function deterministicProjectsAnswer(context: ContextBundle): string {
+  const activeProjects = context.projects.filter((project) => project.status === "active");
+
+  if (activeProjects.length === 0) {
+    return "No encuentro proyectos activos en el contexto real disponible.";
+  }
+
+  return [
+    "Proyectos activos en JARVIS:",
+    bulletList(
+      activeProjects.map((project) => {
+        const openTasks = typeof project.open_task_count === "number" ? ` · ${project.open_task_count} tareas abiertas` : "";
+        return `${project.priority} · ${project.name}${openTasks}`;
+      }),
+    ),
+  ].join("\n");
+}
+
+function deterministicPrioritiesAnswer(context: ContextBundle): string {
+  const items: string[] = [];
+
+  if (context.briefing.nextBestAction) {
+    const task = context.briefing.nextBestAction;
+    items.push(`Prioridad principal: ${task.priority} · ${task.title}${task.project_name ? ` (${task.project_name})` : ""}.`);
+  }
+
+  const highPriorityTasks = context.tasks.filter((task) => task.priority === "P0" || task.priority === "P1").slice(0, 5);
+  if (highPriorityTasks.length > 0) {
+    items.push("Tareas de mayor prioridad:\n" + bulletList(highPriorityTasks.map((task) => `${task.priority} · ${task.title}`)));
+  }
+
+  if (context.briefing.decisions.open.length > 0) {
+    items.push(
+      "Decisiones abiertas que pueden frenar avance:\n" +
+        bulletList(context.briefing.decisions.open.map((decision) => `${decision.priority} · ${decision.title}`)),
+    );
+  }
+
+  if (context.briefing.reminders.overdue.length > 0) {
+    items.push(
+      "Recordatorios vencidos:\n" +
+        bulletList(context.briefing.reminders.overdue.map((reminder) => `${reminder.priority} · ${reminder.title}`)),
+    );
+  }
+
+  return items.length > 0
+    ? items.join("\n\n")
+    : "No encuentro una prioridad clara en los datos actuales. No hay tareas P0/P1, decisiones abiertas o recordatorios vencidos en el contexto acotado.";
+}
+
+function deterministicMemoryAnswer(context: ContextBundle, message: string): string {
+  const normalized = normalizeSearchText(message);
+  const imported = normalized.includes("obsidian")
+    ? context.memory.filter((memory) => memory.id.startsWith("obsidian_memory_"))
+    : context.memory;
+
+  if (imported.length === 0) {
+    return normalized.includes("obsidian")
+      ? "No encuentro memorias importadas de Obsidian en el contexto acotado."
+      : "No encuentro memorias activas en el contexto acotado.";
+  }
+
+  return [
+    normalized.includes("obsidian") ? "Memoria importada de Obsidian:" : "Memoria activa relevante:",
+    bulletList(imported.slice(0, 8).map((memory) => `${memory.priority} · ${memory.title}: ${compactText(memory.content, 160)}`)),
+  ].join("\n");
+}
+
+function deterministicDecisionsAnswer(context: ContextBundle): string {
+  const openDecisions = context.decisions.filter((decision) => decision.status === "open");
+
+  if (openDecisions.length === 0) {
+    return "No encuentro decisiones abiertas en el contexto real disponible.";
+  }
+
+  return [
+    "Decisiones abiertas:",
+    bulletList(
+      openDecisions.map((decision) =>
+        `${decision.priority} · ${decision.title}${decision.project_name ? ` (${decision.project_name})` : ""}`,
+      ),
+    ),
+  ].join("\n");
+}
+
+function deterministicRemindersAnswer(context: ContextBundle): string {
+  if (context.reminders.length === 0) {
+    return "No encuentro recordatorios pendientes en el contexto real disponible.";
+  }
+
+  return [
+    "Recordatorios pendientes:",
+    bulletList(
+      context.reminders.map((reminder) =>
+        `${reminder.priority} · ${reminder.title}${reminder.due_at ? ` · ${reminder.due_at}` : ""}`,
+      ),
+    ),
+  ].join("\n");
+}
+
+function deterministicTasksAnswer(context: ContextBundle): string {
+  if (context.tasks.length === 0) {
+    return "No encuentro tareas abiertas en el contexto real disponible.";
+  }
+
+  return [
+    "Tareas abiertas relevantes:",
+    bulletList(
+      context.tasks
+        .slice(0, 10)
+        .map((task) => `${task.priority} · ${task.title}${task.project_name ? ` (${task.project_name})` : ""}`),
+    ),
+  ].join("\n");
+}
+
+function deterministicOverviewAnswer(context: ContextBundle): string {
+  const lines = [
+    "Resumen local determinista de JARVIS:",
+    `- Proyectos en contexto: ${context.projects.length}.`,
+    `- Tareas abiertas en contexto: ${context.tasks.length}.`,
+    `- Memorias activas en contexto: ${context.memory.length}.`,
+    `- Decisiones en contexto: ${context.decisions.length}.`,
+    `- Recordatorios pendientes en contexto: ${context.reminders.length}.`,
+  ];
+
+  if (context.briefing.nextBestAction) {
+    lines.push(`- Siguiente accion sugerida por datos: ${context.briefing.nextBestAction.title}.`);
+  }
+
+  return lines.join("\n");
+}
+
+function deterministicChatOutput(message: string, mode: ChatMode, context: ContextBundle): ParsedChatOutput {
+  const terms = projectSearchTerms(message);
+  const project = findProjectByTerms(context, terms);
+
+  if (project) {
+    return {
+      answer: projectAnswer(project, contextForProject(context, project)),
+      actionProposals: [],
+    };
+  }
+
+  if (mode === "projects") {
+    return { answer: deterministicProjectsAnswer(context), actionProposals: [] };
+  }
+
+  if (mode === "priorities") {
+    return { answer: deterministicPrioritiesAnswer(context), actionProposals: [] };
+  }
+
+  if (mode === "memory") {
+    return { answer: deterministicMemoryAnswer(context, message), actionProposals: [] };
+  }
+
+  if (mode === "decisions") {
+    return { answer: deterministicDecisionsAnswer(context), actionProposals: [] };
+  }
+
+  if (mode === "reminders") {
+    return { answer: deterministicRemindersAnswer(context), actionProposals: [] };
+  }
+
+  if (mode === "tasks") {
+    return { answer: deterministicTasksAnswer(context), actionProposals: [] };
+  }
+
+  return { answer: deterministicOverviewAnswer(context), actionProposals: [] };
 }
 
 function extractOutputText(payload: unknown): string {
@@ -1033,6 +1347,100 @@ function extractOutputText(payload: unknown): string {
   return parts.join("\n").trim();
 }
 
+function extractWorkersAiOutputText(payload: unknown): string {
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (!isRecord(payload)) {
+    return "";
+  }
+
+  for (const key of ["response", "result", "answer", "output_text", "text"]) {
+    const value = payload[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (isRecord(value)) {
+      const nested = extractWorkersAiOutputText(value);
+
+      if (nested) {
+        return nested;
+      }
+    }
+  }
+
+  return "";
+}
+
+async function withTimeout<TValue>(promise: Promise<TValue>, ms: number): Promise<TValue> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("AI_TIMEOUT")), ms);
+      }),
+    ]);
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function callWorkersAi(
+  env: Env,
+  message: string,
+  mode: ChatMode,
+  context: ContextBundle,
+  requestId: string,
+): Promise<ParsedChatOutput> {
+  if (!env.AI) {
+    console.error("Workers AI binding missing", { requestId });
+    throw new HttpError("AI_BINDING_MISSING", 503);
+  }
+
+  const model = workersAiModel(env);
+  const prompt = [
+    systemInstructions(context.generatedAt),
+    "",
+    userInput(message, mode, context),
+  ].join("\n");
+
+  let payload: unknown;
+
+  try {
+    payload = await withTimeout(
+      env.AI.run(model, {
+        max_tokens: parseMaxOutputTokens(env.OPENAI_MAX_OUTPUT_TOKENS),
+        messages: [
+          { role: "system", content: systemInstructions(context.generatedAt) },
+          { role: "user", content: userInput(message, mode, context) },
+        ],
+        prompt,
+        temperature: 0.2,
+      }),
+      WORKERS_AI_TIMEOUT_MS,
+    );
+  } catch {
+    console.error("Workers AI request failed", { requestId });
+    throw new HttpError("AI_REQUEST_FAILED", 502);
+  }
+
+  const answer = extractWorkersAiOutputText(payload);
+
+  if (!answer) {
+    console.error("Workers AI request returned empty output", { requestId });
+    throw new HttpError("AI_EMPTY_RESPONSE", 502);
+  }
+
+  return parseChatOutput(answer);
+}
+
 async function callOpenAi(
   env: Env,
   message: string,
@@ -1040,7 +1448,7 @@ async function callOpenAi(
   context: ContextBundle,
   requestId: string,
 ): Promise<ParsedChatOutput> {
-  const model = env.OPENAI_MODEL?.trim();
+  const model = env.OPENAI_MODEL?.trim() || "openai";
   const maxOutputTokens = parseMaxOutputTokens(env.OPENAI_MAX_OUTPUT_TOKENS);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), OPENAI_TIMEOUT_MS);
@@ -1097,6 +1505,45 @@ async function callOpenAi(
   return parseChatOutput(answer);
 }
 
+function buildChatResponseData({
+  chatOutput,
+  context,
+  fallbackUsed,
+  mode,
+  model,
+  provider,
+  requestId,
+  startedAt,
+}: {
+  chatOutput: ParsedChatOutput;
+  context: ContextBundle;
+  fallbackUsed: boolean;
+  mode: ChatMode;
+  model: string;
+  provider: AiProvider;
+  requestId: string;
+  startedAt: number;
+}): ContextualChatResponse {
+  return {
+    actionProposals: chatOutput.actionProposals,
+    answer: chatOutput.answer,
+    contextStats: buildContextStats(context),
+    fallbackUsed,
+    generatedAt: context.generatedAt,
+    latencyMs: Date.now() - startedAt,
+    mode,
+    model,
+    provider,
+    requestId,
+    suggestedFollowUps: suggestedFollowUps(mode),
+    usedContext: buildUsedContext(context),
+  };
+}
+
+function deterministicChatResponse(message: string, mode: ChatMode, context: ContextBundle): ParsedChatOutput {
+  return deterministicChatOutput(message, mode, context);
+}
+
 export async function getContextualChatResponse(
   request: Request,
   db: D1Database,
@@ -1117,30 +1564,95 @@ export async function getContextualChatResponse(
     throw caughtError;
   }
 
-  if (!env.OPENAI_API_KEY?.trim() || !env.OPENAI_MODEL?.trim()) {
-    return error("AI_NOT_CONFIGURED", 503, { headers: noStore() });
-  }
-
   const mode = detectMode(message);
-  const model = env.OPENAI_MODEL.trim();
 
   try {
     const context = await loadContextBundle(db, ownerSubject);
-    const chatOutput = await callOpenAi(env, message, mode, context, requestId);
-    const data: ContextualChatResponse = {
-      actionProposals: chatOutput.actionProposals,
-      answer: chatOutput.answer,
-      contextStats: buildContextStats(context),
-      generatedAt: context.generatedAt,
-      latencyMs: Date.now() - startedAt,
-      mode,
-      model,
-      requestId,
-      suggestedFollowUps: suggestedFollowUps(mode),
-      usedContext: buildUsedContext(context),
-    };
+    const provider = configuredProvider(env.AI_PROVIDER);
 
-    return success(data, { headers: noStore() });
+    if (provider === "workers-ai") {
+      try {
+        const chatOutput = await callWorkersAi(env, message, mode, context, requestId);
+        return success(
+          buildChatResponseData({
+            chatOutput,
+            context,
+            fallbackUsed: false,
+            mode,
+            model: workersAiModel(env),
+            provider: "workers-ai",
+            requestId,
+            startedAt,
+          }),
+          { headers: noStore() },
+        );
+      } catch {
+        const chatOutput = deterministicChatResponse(message, mode, context);
+        return success(
+          buildChatResponseData({
+            chatOutput,
+            context,
+            fallbackUsed: true,
+            mode,
+            model: "none",
+            provider: "deterministic",
+            requestId,
+            startedAt,
+          }),
+          { headers: noStore() },
+        );
+      }
+    }
+
+    if (provider === "openai" && openAiReady(env)) {
+      try {
+        const chatOutput = await callOpenAi(env, message, mode, context, requestId);
+        return success(
+          buildChatResponseData({
+            chatOutput,
+            context,
+            fallbackUsed: false,
+            mode,
+            model: env.OPENAI_MODEL?.trim() || "openai",
+            provider: "openai",
+            requestId,
+            startedAt,
+          }),
+          { headers: noStore() },
+        );
+      } catch {
+        const chatOutput = deterministicChatResponse(message, mode, context);
+        return success(
+          buildChatResponseData({
+            chatOutput,
+            context,
+            fallbackUsed: true,
+            mode,
+            model: "none",
+            provider: "deterministic",
+            requestId,
+            startedAt,
+          }),
+          { headers: noStore() },
+        );
+      }
+    }
+
+    const chatOutput = deterministicChatResponse(message, mode, context);
+
+    return success(
+      buildChatResponseData({
+        chatOutput,
+        context,
+        fallbackUsed: true,
+        mode,
+        model: "none",
+        provider: "deterministic",
+        requestId,
+        startedAt,
+      }),
+      { headers: noStore() },
+    );
   } catch (caughtError) {
     if (caughtError instanceof HttpError) {
       return error(caughtError.message, caughtError.status, { headers: noStore() });

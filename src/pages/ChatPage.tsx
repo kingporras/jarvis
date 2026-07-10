@@ -12,6 +12,7 @@ import {
   type ActionHistoryItem,
   type ActionExecutionResult,
   type ActionProposal,
+  type AiProvider,
   type ChatMode,
   type ContextualChatResponse,
   type ContextStats,
@@ -67,6 +68,12 @@ const modeLabels: Record<ChatMode, string> = {
   persons: "Personas",
   reminders: "Recordatorios",
   overview: "Resumen",
+};
+
+const providerLabels: Record<AiProvider, string> = {
+  "workers-ai": "Workers AI",
+  openai: "OpenAI",
+  deterministic: "Determinista local",
 };
 
 const contextLabels: Record<keyof UsedContext, string> = {
@@ -151,11 +158,11 @@ function formatGeneratedAt(value: string | null): string {
 function userErrorMessage(error: unknown): string {
   if (isContextualChatError(error)) {
     if (error.code === "AI_NOT_CONFIGURED") {
-      return "OpenAI no esta configurado en el backend. Falta definir la clave o el modelo.";
+      return "Modo local determinista activo, pero el backend no pudo completar esta respuesta.";
     }
 
     if (error.code === "AI_REQUEST_FAILED" || error.code === "AI_EMPTY_RESPONSE" || error.status === 502) {
-      return "OpenAI no pudo responder. Revisa modelo, clave o disponibilidad del servicio.";
+      return "La IA externa no pudo responder y JARVIS no pudo completar el fallback local.";
     }
 
     if (error.status === 401 || error.status === 403) {
@@ -219,6 +226,42 @@ function formatLatency(value: number | null): string {
   }
 
   return `${(value / 1000).toFixed(1)} s`;
+}
+
+function providerStatusText(response: ContextualChatResponse | null): string {
+  if (!response) {
+    return "Sin proveedor aun";
+  }
+
+  if (response.provider === "deterministic") {
+    return response.fallbackUsed ? "Modo local determinista activo" : "Determinista local";
+  }
+
+  if (response.fallbackUsed) {
+    return "JARVIS respondio con fallback determinista";
+  }
+
+  return `${providerLabels[response.provider]} activo`;
+}
+
+function providerTone(response: ContextualChatResponse | null): "neutral" | "info" | "success" | "warning" {
+  if (!response) {
+    return "neutral";
+  }
+
+  if (response.fallbackUsed || response.provider === "deterministic") {
+    return "warning";
+  }
+
+  return "success";
+}
+
+function fallbackLabel(response: ContextualChatResponse | null): string {
+  if (!response) {
+    return "Sin respuesta";
+  }
+
+  return response.fallbackUsed ? "Si" : "No";
 }
 
 function formatProposalPayloadValue(key: string, value: string | null): string {
@@ -395,6 +438,7 @@ export function ChatPage() {
         ([, used]) => used,
       )
     : [];
+  const activeContextCount = activeContext.length;
   const proposalExecuting = Object.values(proposalStates).some((state) => state.status === "executing");
 
   const loadActionHistory = useCallback(async () => {
@@ -631,17 +675,23 @@ export function ChatPage() {
           <Card className="panel">
             <SectionHeader eyebrow="Modo" title={lastResponse ? modeLabels[lastResponse.mode] : "Sin consulta"} />
             <p>Ultima respuesta: {formatGeneratedAt(lastResponse?.generatedAt ?? null)}</p>
-            <Badge tone={lastResponse ? "info" : "neutral"}>
-              {lastResponse ? "Contexto D1" : "Esperando pregunta"}
-            </Badge>
+            <Badge tone={providerTone(lastResponse)}>{providerStatusText(lastResponse)}</Badge>
           </Card>
 
           <Card className="panel">
             <SectionHeader eyebrow="Observabilidad" title="Respuesta" />
             <div className="chat-meta-grid">
               <div>
+                <span>Proveedor</span>
+                <strong>{lastResponse ? providerLabels[lastResponse.provider] : "Sin respuesta"}</strong>
+              </div>
+              <div>
                 <span>Modelo</span>
                 <strong>{lastResponse?.model ?? "Sin respuesta"}</strong>
+              </div>
+              <div>
+                <span>Fallback</span>
+                <strong>{fallbackLabel(lastResponse)}</strong>
               </div>
               <div>
                 <span>Latencia</span>
@@ -650,6 +700,10 @@ export function ChatPage() {
               <div>
                 <span>Request</span>
                 <strong>{lastResponse?.requestId ?? "Sin respuesta"}</strong>
+              </div>
+              <div>
+                <span>Contexto usado</span>
+                <strong>{lastResponse ? activeContextCount : "Sin respuesta"}</strong>
               </div>
             </div>
           </Card>

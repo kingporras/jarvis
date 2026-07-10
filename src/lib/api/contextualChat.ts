@@ -8,6 +8,8 @@ export type ChatMode =
   | "reminders"
   | "overview";
 
+export type AiProvider = "workers-ai" | "openai" | "deterministic";
+
 export interface UsedContext {
   briefing: boolean;
   projects: boolean;
@@ -84,10 +86,12 @@ export interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  fallbackUsed: boolean;
   generatedAt: string;
   latencyMs: number;
   mode: ChatMode;
   model: string;
+  provider: AiProvider;
   requestId: string;
   suggestedFollowUps: string[];
   usedContext: UsedContext;
