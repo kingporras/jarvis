@@ -25,6 +25,7 @@ coverage
 # Build and cache output
 dist
 build/Release
+.jarvis-imports/
 .cache
 .parcel-cache
 .vite/
