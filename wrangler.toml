@@ -6,3 +6,6 @@ pages_build_output_dir = "dist"
 binding = "DB"
 database_name = "jarvis-db"
 database_id = "1def1e29-e52b-4333-b607-2590cee8d508"
+
+[ai]
+binding = "AI"
