@@ -9,6 +9,13 @@ export type ChatMode =
   | "overview";
 
 export type AiProvider = "workers-ai" | "openai" | "deterministic";
+export type FallbackReason =
+  | "AI_PROVIDER_NOT_WORKERS_AI"
+  | "AI_BINDING_MISSING"
+  | "WORKERS_AI_REQUEST_FAILED"
+  | "OPENAI_NOT_CONFIGURED"
+  | "OPENAI_REQUEST_FAILED"
+  | "UNKNOWN";
 
 export interface UsedContext {
   briefing: boolean;
@@ -86,6 +93,7 @@ export interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
   generatedAt: string;
   latencyMs: number;

@@ -13,6 +13,13 @@ type ChatMode =
   | "overview";
 
 type AiProvider = "workers-ai" | "openai" | "deterministic";
+type FallbackReason =
+  | "AI_PROVIDER_NOT_WORKERS_AI"
+  | "AI_BINDING_MISSING"
+  | "WORKERS_AI_REQUEST_FAILED"
+  | "OPENAI_NOT_CONFIGURED"
+  | "OPENAI_REQUEST_FAILED"
+  | "UNKNOWN";
 
 type ActionProposalType =
   | "create_task"
@@ -149,6 +156,7 @@ interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
   generatedAt: string;
   latencyMs: number;
@@ -177,6 +185,27 @@ interface ParsedChatOutput {
   answer: string;
 }
 
+interface WorkersAiTestResult {
+  attempted: true;
+  errorCode: "AI_BINDING_MISSING" | "AI_MODEL_FAILED" | "AI_UNKNOWN_ERROR" | null;
+  message?: string;
+  ok: boolean;
+  responsePreview?: string;
+}
+
+interface AiStatusData {
+  canAttemptWorkersAi: boolean;
+  configuredProvider: AiProvider;
+  effectiveProvider: AiProvider;
+  fallbackReason: FallbackReason | null;
+  openAiConfigured: boolean;
+  requestId: string;
+  workersAiBindingPresent: boolean;
+  workersAiModel: string;
+  workersAiModelConfigured: boolean;
+  workersAiTest?: WorkersAiTestResult;
+}
+
 type UnknownRecord = Record<string, unknown>;
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
@@ -187,6 +216,8 @@ const FALLBACK_EMPTY_AI_ANSWER = "No pude generar una respuesta textual segura."
 const MAX_MESSAGE_LENGTH = 2_000;
 const OPENAI_TIMEOUT_MS = 20_000;
 const WORKERS_AI_TIMEOUT_MS = 20_000;
+const WORKERS_AI_STATUS_TEST_PROMPT = "Responde exactamente: JARVIS_WORKERS_AI_OK";
+const WORKERS_AI_STATUS_TEST_EXPECTED = "JARVIS_WORKERS_AI_OK";
 const ACTION_PROPOSAL_TYPES = [
   "create_task",
   "save_memory",
@@ -376,6 +407,68 @@ function workersAiModel(env: Env): string {
 
 function openAiReady(env: Env): boolean {
   return Boolean(env.OPENAI_API_KEY?.trim() && env.OPENAI_MODEL?.trim());
+}
+
+function workersAiBindingPresent(env: Env): boolean {
+  return Boolean(env.AI);
+}
+
+function workersAiModelConfigured(env: Env): boolean {
+  return Boolean(env.WORKERS_AI_MODEL?.trim());
+}
+
+function canAttemptWorkersAi(env: Env): boolean {
+  return workersAiBindingPresent(env) && Boolean(workersAiModel(env));
+}
+
+function fallbackReasonForProvider(provider: AiProvider, env: Env): FallbackReason | null {
+  if (provider === "workers-ai") {
+    return canAttemptWorkersAi(env) ? null : "AI_BINDING_MISSING";
+  }
+
+  if (provider === "openai") {
+    return openAiReady(env) ? null : "OPENAI_NOT_CONFIGURED";
+  }
+
+  return "AI_PROVIDER_NOT_WORKERS_AI";
+}
+
+function effectiveProvider(provider: AiProvider, env: Env): AiProvider {
+  if (provider === "workers-ai" && canAttemptWorkersAi(env)) {
+    return "workers-ai";
+  }
+
+  if (provider === "openai" && openAiReady(env)) {
+    return "openai";
+  }
+
+  return "deterministic";
+}
+
+function fallbackReasonFromError(caughtError: unknown, provider: AiProvider): FallbackReason {
+  if (caughtError instanceof HttpError) {
+    if (caughtError.message === "AI_BINDING_MISSING") {
+      return "AI_BINDING_MISSING";
+    }
+
+    if (provider === "workers-ai") {
+      return "WORKERS_AI_REQUEST_FAILED";
+    }
+
+    if (provider === "openai") {
+      return "OPENAI_REQUEST_FAILED";
+    }
+  }
+
+  if (provider === "workers-ai") {
+    return "WORKERS_AI_REQUEST_FAILED";
+  }
+
+  if (provider === "openai") {
+    return "OPENAI_REQUEST_FAILED";
+  }
+
+  return "UNKNOWN";
 }
 
 function truncateText(value: string, maxLength: number): string {
@@ -1441,6 +1534,80 @@ async function callWorkersAi(
   return parseChatOutput(answer);
 }
 
+async function testWorkersAi(env: Env): Promise<WorkersAiTestResult> {
+  if (!env.AI) {
+    return {
+      attempted: true,
+      errorCode: "AI_BINDING_MISSING",
+      message: "Workers AI no respondió correctamente",
+      ok: false,
+    };
+  }
+
+  let payload: unknown;
+
+  try {
+    payload = await withTimeout(
+      env.AI.run(workersAiModel(env), {
+        max_tokens: 32,
+        messages: [{ role: "user", content: WORKERS_AI_STATUS_TEST_PROMPT }],
+        temperature: 0,
+      }),
+      WORKERS_AI_TIMEOUT_MS,
+    );
+  } catch {
+    return {
+      attempted: true,
+      errorCode: "AI_UNKNOWN_ERROR",
+      message: "Workers AI no respondió correctamente",
+      ok: false,
+    };
+  }
+
+  const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 80);
+  const ok = responsePreview.includes(WORKERS_AI_STATUS_TEST_EXPECTED);
+
+  if (!ok) {
+    return {
+      attempted: true,
+      errorCode: "AI_MODEL_FAILED",
+      message: "Workers AI no respondió correctamente",
+      ok: false,
+    };
+  }
+
+  return {
+    attempted: true,
+    errorCode: null,
+    ok: true,
+    responsePreview,
+  };
+}
+
+export async function getAiStatusResponse(request: Request, env: Env): Promise<Response> {
+  const requestId = newRequestId();
+  const provider = configuredProvider(env.AI_PROVIDER);
+  const data: AiStatusData = {
+    canAttemptWorkersAi: canAttemptWorkersAi(env),
+    configuredProvider: provider,
+    effectiveProvider: effectiveProvider(provider, env),
+    fallbackReason: fallbackReasonForProvider(provider, env),
+    openAiConfigured: openAiReady(env),
+    requestId,
+    workersAiBindingPresent: workersAiBindingPresent(env),
+    workersAiModel: workersAiModel(env),
+    workersAiModelConfigured: workersAiModelConfigured(env),
+  };
+
+  const url = new URL(request.url);
+
+  if (url.searchParams.get("test") === "workers-ai") {
+    data.workersAiTest = await testWorkersAi(env);
+  }
+
+  return success(data, { headers: noStore() });
+}
+
 async function callOpenAi(
   env: Env,
   message: string,
@@ -1508,6 +1675,7 @@ async function callOpenAi(
 function buildChatResponseData({
   chatOutput,
   context,
+  fallbackReason,
   fallbackUsed,
   mode,
   model,
@@ -1517,6 +1685,7 @@ function buildChatResponseData({
 }: {
   chatOutput: ParsedChatOutput;
   context: ContextBundle;
+  fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
   mode: ChatMode;
   model: string;
@@ -1528,6 +1697,7 @@ function buildChatResponseData({
     actionProposals: chatOutput.actionProposals,
     answer: chatOutput.answer,
     contextStats: buildContextStats(context),
+    fallbackReason,
     fallbackUsed,
     generatedAt: context.generatedAt,
     latencyMs: Date.now() - startedAt,
@@ -1577,6 +1747,7 @@ export async function getContextualChatResponse(
           buildChatResponseData({
             chatOutput,
             context,
+            fallbackReason: null,
             fallbackUsed: false,
             mode,
             model: workersAiModel(env),
@@ -1586,12 +1757,13 @@ export async function getContextualChatResponse(
           }),
           { headers: noStore() },
         );
-      } catch {
+      } catch (caughtError) {
         const chatOutput = deterministicChatResponse(message, mode, context);
         return success(
           buildChatResponseData({
             chatOutput,
             context,
+            fallbackReason: fallbackReasonFromError(caughtError, "workers-ai"),
             fallbackUsed: true,
             mode,
             model: "none",
@@ -1611,6 +1783,7 @@ export async function getContextualChatResponse(
           buildChatResponseData({
             chatOutput,
             context,
+            fallbackReason: null,
             fallbackUsed: false,
             mode,
             model: env.OPENAI_MODEL?.trim() || "openai",
@@ -1620,12 +1793,13 @@ export async function getContextualChatResponse(
           }),
           { headers: noStore() },
         );
-      } catch {
+      } catch (caughtError) {
         const chatOutput = deterministicChatResponse(message, mode, context);
         return success(
           buildChatResponseData({
             chatOutput,
             context,
+            fallbackReason: fallbackReasonFromError(caughtError, "openai"),
             fallbackUsed: true,
             mode,
             model: "none",
@@ -1644,6 +1818,7 @@ export async function getContextualChatResponse(
       buildChatResponseData({
         chatOutput,
         context,
+        fallbackReason: fallbackReasonForProvider(provider, env),
         fallbackUsed: true,
         mode,
         model: "none",

@@ -6,7 +6,7 @@ import {
   listDecisions as listOwnedDecisions,
   updateDecision as updateOwnedDecision,
 } from "../lib/decisions";
-import { getContextualChatResponse } from "../lib/contextualChat";
+import { getAiStatusResponse, getContextualChatResponse } from "../lib/contextualChat";
 import { getExecutiveBriefing } from "../lib/dashboardBriefing";
 import { getJsonExport } from "../lib/jsonExport";
 import {
@@ -295,6 +295,10 @@ async function route(context: PagesContext): Promise<Response> {
     identity = await getAccessIdentity(context);
   } catch (caughtError) {
     return accessErrorResponse(caughtError);
+  }
+
+  if (path === "/ai/status" && method === "GET") {
+    return getAiStatusResponse(context.request, context.env);
   }
 
   const db = getDb(context.env);

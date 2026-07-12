@@ -16,6 +16,7 @@ import {
   type ChatMode,
   type ContextualChatResponse,
   type ContextStats,
+  type FallbackReason,
   type UsedContext,
 } from "../lib/api/contextualChat";
 
@@ -94,6 +95,15 @@ const contextStatLabels: Record<keyof ContextStats, string> = {
   decisions: "Decisiones",
   persons: "Personas",
   reminders: "Recordatorios",
+};
+
+const fallbackReasonLabels: Record<FallbackReason, string> = {
+  AI_PROVIDER_NOT_WORKERS_AI: "AI_PROVIDER_NOT_WORKERS_AI",
+  AI_BINDING_MISSING: "AI_BINDING_MISSING",
+  WORKERS_AI_REQUEST_FAILED: "WORKERS_AI_REQUEST_FAILED",
+  OPENAI_NOT_CONFIGURED: "OPENAI_NOT_CONFIGURED",
+  OPENAI_REQUEST_FAILED: "OPENAI_REQUEST_FAILED",
+  UNKNOWN: "UNKNOWN",
 };
 
 const proposalTypeLabels: Record<ActionProposal["type"], string> = {
@@ -262,6 +272,14 @@ function fallbackLabel(response: ContextualChatResponse | null): string {
   }
 
   return response.fallbackUsed ? "Si" : "No";
+}
+
+function fallbackReasonLabel(response: ContextualChatResponse | null): string {
+  if (!response) {
+    return "Sin respuesta";
+  }
+
+  return response.fallbackReason ? fallbackReasonLabels[response.fallbackReason] : "Ninguno";
 }
 
 function formatProposalPayloadValue(key: string, value: string | null): string {
@@ -692,6 +710,10 @@ export function ChatPage() {
               <div>
                 <span>Fallback</span>
                 <strong>{fallbackLabel(lastResponse)}</strong>
+              </div>
+              <div>
+                <span>Motivo fallback</span>
+                <strong>{fallbackReasonLabel(lastResponse)}</strong>
               </div>
               <div>
                 <span>Latencia</span>
