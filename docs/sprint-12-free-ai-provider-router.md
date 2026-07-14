@@ -53,7 +53,15 @@ Si el modelo principal falla, JARVIS intenta modelos Workers AI de respaldo. Pri
 @cf/mistral/mistral-7b-instruct-v0.1
 ```
 
-El diagnostico privado `GET /api/ai/status?test=workers-ai` devuelve `attemptedModels` y `selectedModel`. `selectedModel` indica el primer modelo que respondio correctamente al prompt minimo de prueba. Si un modelo devuelve una estructura inesperada o una respuesta que no contiene el texto esperado, aparece como `AI_MODEL_FAILED` o `AI_RESPONSE_UNPARSEABLE` en el intento, sin exponer la respuesta completa.
+El diagnostico privado `GET /api/ai/status?test=workers-ai` devuelve `attemptedModels` y `selectedModel`. `selectedModel` indica el primer modelo que respondio correctamente al prompt minimo de prueba. Si un modelo devuelve una estructura inesperada, aparece `AI_RESPONSE_UNPARSEABLE` con `responseShape`: tipo superior, claves superiores, claves anidadas y rutas de campos string, sin exponer la respuesta completa.
+
+El parser de Workers AI acepta varias formas de respuesta usadas por modelos como Qwen: `response`, `text`, `generated_text`, `output`, `content`, `message`, `completion`, arrays de `response`, `choices`, `messages` y objetos anidados dentro de `result`. Tambien elimina bloques `<think>...</think>` y compacta espacios antes de entregar texto al Chat.
+
+La diferencia entre errores de diagnostico es:
+
+- `AI_MODEL_FAILED`: la llamada al modelo fallo.
+- `AI_RESPONSE_UNPARSEABLE`: el modelo respondio, pero no se encontro texto seguro en el shape conocido.
+- `AI_TEST_UNEXPECTED_RESPONSE`: el texto se pudo extraer, pero no contenia `JARVIS_WORKERS_AI_OK`.
 
 Si todos los modelos fallan, el diagnostico devuelve `AI_ALL_MODELS_FAILED` y el Chat responde con fallback determinista usando `fallbackReason=WORKERS_AI_ALL_MODELS_FAILED`. En ese caso hay que revisar que los modelos configurados esten disponibles para la cuenta de Cloudflare y probar otro valor en `WORKERS_AI_FALLBACK_MODELS`.
 

@@ -186,12 +186,25 @@ interface ParsedChatOutput {
   answer: string;
 }
 
-type WorkersAiAttemptError = "AI_MODEL_FAILED" | "AI_RESPONSE_UNPARSEABLE" | "AI_UNKNOWN_ERROR";
+type WorkersAiAttemptError =
+  | "AI_MODEL_FAILED"
+  | "AI_RESPONSE_UNPARSEABLE"
+  | "AI_TEST_UNEXPECTED_RESPONSE"
+  | "AI_UNKNOWN_ERROR";
+
+interface WorkersAiResponseShape {
+  nestedKeys: string[];
+  stringFieldsFound: string[];
+  topLevelKeys: string[];
+  topLevelType: string;
+}
 
 interface WorkersAiAttemptResult {
   errorCode: WorkersAiAttemptError | null;
   model: string;
   ok: boolean;
+  responsePreview?: string;
+  responseShape?: WorkersAiResponseShape;
 }
 
 type WorkersAiTestError = "AI_BINDING_MISSING" | "AI_ALL_MODELS_FAILED" | null;
@@ -1501,67 +1514,148 @@ function extractOutputText(payload: unknown): string {
   return parts.join("\n").trim();
 }
 
-function extractWorkersAiOutputText(payload: unknown): string {
-  if (typeof payload === "string") {
-    return payload.trim();
+const WORKERS_AI_TEXT_KEYS = [
+  "response",
+  "text",
+  "generated_text",
+  "output",
+  "content",
+  "message",
+  "completion",
+] as const;
+const WORKERS_AI_IGNORED_KEYS = new Set(["id", "model", "created", "usage", "timings", "metadata", "error"]);
+const WORKERS_AI_MAX_PARSE_DEPTH = 4;
+const WORKERS_AI_MAX_STRING_LENGTH = 8_000;
+
+function valueShape(value: unknown): string {
+  if (Array.isArray(value)) {
+    return "array";
+  }
+
+  if (value === null) {
+    return "null";
+  }
+
+  return typeof value;
+}
+
+function cleanWorkersAiText(value: string): string {
+  return value
+    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function safeWorkersAiTextCandidate(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const cleaned = cleanWorkersAiText(value);
+
+  if (!cleaned || cleaned.length > WORKERS_AI_MAX_STRING_LENGTH) {
+    return null;
+  }
+
+  return cleaned;
+}
+
+function chooseWorkersAiTextCandidate(candidates: string[]): string {
+  return candidates.sort((left, right) => right.length - left.length)[0] ?? "";
+}
+
+function extractWorkersAiOutputText(payload: unknown, depth = 0): string {
+  const directCandidate = safeWorkersAiTextCandidate(payload);
+
+  if (directCandidate) {
+    return directCandidate;
+  }
+
+  if (depth >= WORKERS_AI_MAX_PARSE_DEPTH) {
+    return "";
+  }
+
+  if (Array.isArray(payload)) {
+    return chooseWorkersAiTextCandidate(
+      payload
+        .map((item) => extractWorkersAiOutputText(item, depth + 1))
+        .filter(Boolean),
+    );
   }
 
   if (!isRecord(payload)) {
     return "";
   }
 
-  if (Array.isArray(payload.choices)) {
-    const parts: string[] = [];
+  const candidates: string[] = [];
 
-    for (const choice of payload.choices) {
-      if (!isRecord(choice)) {
-        continue;
-      }
-
-      if (typeof choice.text === "string" && choice.text.trim()) {
-        parts.push(choice.text.trim());
-        continue;
-      }
-
-      if (isRecord(choice.message)) {
-        const content = choice.message.content;
-
-        if (typeof content === "string" && content.trim()) {
-          parts.push(content.trim());
-        } else if (Array.isArray(content)) {
-          for (const item of content) {
-            if (isRecord(item) && typeof item.text === "string" && item.text.trim()) {
-              parts.push(item.text.trim());
-            }
-          }
-        }
-      }
-    }
-
-    const joinedChoices = parts.join("\n").trim();
-
-    if (joinedChoices) {
-      return joinedChoices;
-    }
-  }
-
-  for (const key of ["response", "result", "answer", "output_text", "text"]) {
+  for (const key of WORKERS_AI_TEXT_KEYS) {
     const value = payload[key];
+    const candidate = safeWorkersAiTextCandidate(value) ?? extractWorkersAiOutputText(value, depth + 1);
 
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-
-    if (isRecord(value)) {
-      const nested = extractWorkersAiOutputText(value);
-
-      if (nested) {
-        return nested;
-      }
+    if (candidate) {
+      candidates.push(candidate);
     }
   }
 
-  return "";
+  for (const [key, value] of Object.entries(payload)) {
+    if (WORKERS_AI_IGNORED_KEYS.has(key) || WORKERS_AI_TEXT_KEYS.includes(key as (typeof WORKERS_AI_TEXT_KEYS)[number])) {
+      continue;
+    }
+
+    const candidate = extractWorkersAiOutputText(value, depth + 1);
+
+    if (candidate) {
+      candidates.push(candidate);
+    }
+  }
+
+  return chooseWorkersAiTextCandidate(candidates);
+}
+
+function describeWorkersAiResponseShape(payload: unknown): WorkersAiResponseShape {
+  const topLevelKeys = isRecord(payload) ? Object.keys(payload).slice(0, 16) : [];
+  const nestedKeys = new Set<string>();
+  const stringFieldsFound = new Set<string>();
+
+  function visit(value: unknown, path: string, depth: number): void {
+    if (depth > 3) {
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      value.slice(0, 4).forEach((item, index) => visit(item, `${path}[${index}]`, depth + 1));
+      return;
+    }
+
+    if (!isRecord(value)) {
+      return;
+    }
+
+    for (const [key, childValue] of Object.entries(value)) {
+      if (WORKERS_AI_IGNORED_KEYS.has(key)) {
+        continue;
+      }
+
+      const childPath = path ? `${path}.${key}` : key;
+      nestedKeys.add(childPath);
+
+      if (typeof childValue === "string" && childValue.trim() && childValue.length <= WORKERS_AI_MAX_STRING_LENGTH) {
+        stringFieldsFound.add(childPath);
+      }
+
+      visit(childValue, childPath, depth + 1);
+    }
+  }
+
+  visit(payload, "", 0);
+
+  return {
+    nestedKeys: [...nestedKeys].slice(0, 32),
+    stringFieldsFound: [...stringFieldsFound].slice(0, 16),
+    topLevelKeys,
+    topLevelType: valueShape(payload),
+  };
 }
 
 async function withTimeout<TValue>(promise: Promise<TValue>, ms: number): Promise<TValue> {
@@ -1666,19 +1760,29 @@ async function testWorkersAi(env: Env): Promise<WorkersAiTestResult> {
       continue;
     }
 
-    const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 80);
+    const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 120);
 
     if (!responsePreview) {
-      attemptedModels.push({ errorCode: "AI_RESPONSE_UNPARSEABLE", model, ok: false });
+      attemptedModels.push({
+        errorCode: "AI_RESPONSE_UNPARSEABLE",
+        model,
+        ok: false,
+        responseShape: describeWorkersAiResponseShape(payload),
+      });
       continue;
     }
 
     if (!responsePreview.includes(WORKERS_AI_STATUS_TEST_EXPECTED)) {
-      attemptedModels.push({ errorCode: "AI_MODEL_FAILED", model, ok: false });
+      attemptedModels.push({
+        errorCode: "AI_TEST_UNEXPECTED_RESPONSE",
+        model,
+        ok: false,
+        responsePreview,
+      });
       continue;
     }
 
-    attemptedModels.push({ errorCode: null, model, ok: true });
+    attemptedModels.push({ errorCode: null, model, ok: true, responsePreview });
 
     return {
       attempted: true,
