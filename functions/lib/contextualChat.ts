@@ -16,6 +16,7 @@ type AiProvider = "workers-ai" | "openai" | "deterministic";
 type FallbackReason =
   | "AI_PROVIDER_NOT_WORKERS_AI"
   | "AI_BINDING_MISSING"
+  | "WORKERS_AI_ALL_MODELS_FAILED"
   | "WORKERS_AI_REQUEST_FAILED"
   | "OPENAI_NOT_CONFIGURED"
   | "OPENAI_REQUEST_FAILED"
@@ -185,12 +186,29 @@ interface ParsedChatOutput {
   answer: string;
 }
 
+type WorkersAiAttemptError = "AI_MODEL_FAILED" | "AI_RESPONSE_UNPARSEABLE" | "AI_UNKNOWN_ERROR";
+
+interface WorkersAiAttemptResult {
+  errorCode: WorkersAiAttemptError | null;
+  model: string;
+  ok: boolean;
+}
+
+type WorkersAiTestError = "AI_BINDING_MISSING" | "AI_ALL_MODELS_FAILED" | null;
+
 interface WorkersAiTestResult {
   attempted: true;
-  errorCode: "AI_BINDING_MISSING" | "AI_MODEL_FAILED" | "AI_UNKNOWN_ERROR" | null;
+  attemptedModels: WorkersAiAttemptResult[];
+  errorCode: WorkersAiTestError;
   message?: string;
   ok: boolean;
   responsePreview?: string;
+  selectedModel: string | null;
+}
+
+interface WorkersAiChatResult {
+  chatOutput: ParsedChatOutput;
+  model: string;
 }
 
 interface AiStatusData {
@@ -218,6 +236,12 @@ const OPENAI_TIMEOUT_MS = 20_000;
 const WORKERS_AI_TIMEOUT_MS = 20_000;
 const WORKERS_AI_STATUS_TEST_PROMPT = "Responde exactamente: JARVIS_WORKERS_AI_OK";
 const WORKERS_AI_STATUS_TEST_EXPECTED = "JARVIS_WORKERS_AI_OK";
+const DEFAULT_WORKERS_AI_FALLBACK_MODELS = [
+  "@cf/meta/llama-3.1-8b-instruct",
+  "@cf/meta/llama-3-8b-instruct",
+  "@cf/mistral/mistral-7b-instruct-v0.1",
+] as const;
+const MAX_WORKERS_AI_MODEL_ATTEMPTS = 4;
 const ACTION_PROPOSAL_TYPES = [
   "create_task",
   "save_memory",
@@ -405,6 +429,39 @@ function workersAiModel(env: Env): string {
   return env.WORKERS_AI_MODEL?.trim() || DEFAULT_WORKERS_AI_MODEL;
 }
 
+function parseWorkersAiModelList(rawValue: string | undefined): string[] {
+  if (!rawValue?.trim()) {
+    return [];
+  }
+
+  return rawValue
+    .split(",")
+    .map((model) => model.trim())
+    .filter(Boolean);
+}
+
+function workersAiCandidateModels(env: Env): string[] {
+  const configuredFallbacks = parseWorkersAiModelList(env.WORKERS_AI_FALLBACK_MODELS);
+  const fallbackModels = configuredFallbacks.length > 0 ? configuredFallbacks : [...DEFAULT_WORKERS_AI_FALLBACK_MODELS];
+  const seen = new Set<string>();
+  const models: string[] = [];
+
+  for (const model of [workersAiModel(env), ...fallbackModels]) {
+    if (seen.has(model)) {
+      continue;
+    }
+
+    seen.add(model);
+    models.push(model);
+
+    if (models.length >= MAX_WORKERS_AI_MODEL_ATTEMPTS) {
+      break;
+    }
+  }
+
+  return models;
+}
+
 function openAiReady(env: Env): boolean {
   return Boolean(env.OPENAI_API_KEY?.trim() && env.OPENAI_MODEL?.trim());
 }
@@ -449,6 +506,10 @@ function fallbackReasonFromError(caughtError: unknown, provider: AiProvider): Fa
   if (caughtError instanceof HttpError) {
     if (caughtError.message === "AI_BINDING_MISSING") {
       return "AI_BINDING_MISSING";
+    }
+
+    if (caughtError.message === "AI_ALL_MODELS_FAILED") {
+      return "WORKERS_AI_ALL_MODELS_FAILED";
     }
 
     if (provider === "workers-ai") {
@@ -1449,6 +1510,41 @@ function extractWorkersAiOutputText(payload: unknown): string {
     return "";
   }
 
+  if (Array.isArray(payload.choices)) {
+    const parts: string[] = [];
+
+    for (const choice of payload.choices) {
+      if (!isRecord(choice)) {
+        continue;
+      }
+
+      if (typeof choice.text === "string" && choice.text.trim()) {
+        parts.push(choice.text.trim());
+        continue;
+      }
+
+      if (isRecord(choice.message)) {
+        const content = choice.message.content;
+
+        if (typeof content === "string" && content.trim()) {
+          parts.push(content.trim());
+        } else if (Array.isArray(content)) {
+          for (const item of content) {
+            if (isRecord(item) && typeof item.text === "string" && item.text.trim()) {
+              parts.push(item.text.trim());
+            }
+          }
+        }
+      }
+    }
+
+    const joinedChoices = parts.join("\n").trim();
+
+    if (joinedChoices) {
+      return joinedChoices;
+    }
+  }
+
   for (const key of ["response", "result", "answer", "output_text", "text"]) {
     const value = payload[key];
 
@@ -1491,96 +1587,116 @@ async function callWorkersAi(
   mode: ChatMode,
   context: ContextBundle,
   requestId: string,
-): Promise<ParsedChatOutput> {
+): Promise<WorkersAiChatResult> {
   if (!env.AI) {
     console.error("Workers AI binding missing", { requestId });
     throw new HttpError("AI_BINDING_MISSING", 503);
   }
 
-  const model = workersAiModel(env);
   const prompt = [
     systemInstructions(context.generatedAt),
     "",
     userInput(message, mode, context),
   ].join("\n");
+  const input = {
+    max_tokens: parseMaxOutputTokens(env.OPENAI_MAX_OUTPUT_TOKENS),
+    messages: [
+      { role: "system", content: systemInstructions(context.generatedAt) },
+      { role: "user", content: userInput(message, mode, context) },
+    ],
+    prompt,
+    temperature: 0.2,
+  };
 
-  let payload: unknown;
+  for (const model of workersAiCandidateModels(env)) {
+    let payload: unknown;
 
-  try {
-    payload = await withTimeout(
-      env.AI.run(model, {
-        max_tokens: parseMaxOutputTokens(env.OPENAI_MAX_OUTPUT_TOKENS),
-        messages: [
-          { role: "system", content: systemInstructions(context.generatedAt) },
-          { role: "user", content: userInput(message, mode, context) },
-        ],
-        prompt,
-        temperature: 0.2,
-      }),
-      WORKERS_AI_TIMEOUT_MS,
-    );
-  } catch {
-    console.error("Workers AI request failed", { requestId });
-    throw new HttpError("AI_REQUEST_FAILED", 502);
+    try {
+      payload = await withTimeout(env.AI.run(model, input), WORKERS_AI_TIMEOUT_MS);
+    } catch {
+      console.error("Workers AI model request failed", { model, requestId });
+      continue;
+    }
+
+    const answer = extractWorkersAiOutputText(payload);
+
+    if (!answer) {
+      console.error("Workers AI response was unparseable", { model, requestId });
+      continue;
+    }
+
+    return {
+      chatOutput: parseChatOutput(answer),
+      model,
+    };
   }
 
-  const answer = extractWorkersAiOutputText(payload);
-
-  if (!answer) {
-    console.error("Workers AI request returned empty output", { requestId });
-    throw new HttpError("AI_EMPTY_RESPONSE", 502);
-  }
-
-  return parseChatOutput(answer);
+  console.error("All Workers AI model attempts failed", { requestId });
+  throw new HttpError("AI_ALL_MODELS_FAILED", 502);
 }
 
 async function testWorkersAi(env: Env): Promise<WorkersAiTestResult> {
   if (!env.AI) {
     return {
       attempted: true,
+      attemptedModels: [],
       errorCode: "AI_BINDING_MISSING",
       message: "Workers AI no respondió correctamente",
       ok: false,
+      selectedModel: null,
     };
   }
 
-  let payload: unknown;
+  const attemptedModels: WorkersAiAttemptResult[] = [];
 
-  try {
-    payload = await withTimeout(
-      env.AI.run(workersAiModel(env), {
-        max_tokens: 32,
-        messages: [{ role: "user", content: WORKERS_AI_STATUS_TEST_PROMPT }],
-        temperature: 0,
-      }),
-      WORKERS_AI_TIMEOUT_MS,
-    );
-  } catch {
+  for (const model of workersAiCandidateModels(env)) {
+    let payload: unknown;
+
+    try {
+      payload = await withTimeout(
+        env.AI.run(model, {
+          max_tokens: 32,
+          messages: [{ role: "user", content: WORKERS_AI_STATUS_TEST_PROMPT }],
+          temperature: 0,
+        }),
+        WORKERS_AI_TIMEOUT_MS,
+      );
+    } catch {
+      attemptedModels.push({ errorCode: "AI_MODEL_FAILED", model, ok: false });
+      continue;
+    }
+
+    const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 80);
+
+    if (!responsePreview) {
+      attemptedModels.push({ errorCode: "AI_RESPONSE_UNPARSEABLE", model, ok: false });
+      continue;
+    }
+
+    if (!responsePreview.includes(WORKERS_AI_STATUS_TEST_EXPECTED)) {
+      attemptedModels.push({ errorCode: "AI_MODEL_FAILED", model, ok: false });
+      continue;
+    }
+
+    attemptedModels.push({ errorCode: null, model, ok: true });
+
     return {
       attempted: true,
-      errorCode: "AI_UNKNOWN_ERROR",
-      message: "Workers AI no respondió correctamente",
-      ok: false,
-    };
-  }
-
-  const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 80);
-  const ok = responsePreview.includes(WORKERS_AI_STATUS_TEST_EXPECTED);
-
-  if (!ok) {
-    return {
-      attempted: true,
-      errorCode: "AI_MODEL_FAILED",
-      message: "Workers AI no respondió correctamente",
-      ok: false,
+      attemptedModels,
+      errorCode: null,
+      ok: true,
+      responsePreview,
+      selectedModel: model,
     };
   }
 
   return {
     attempted: true,
-    errorCode: null,
-    ok: true,
-    responsePreview,
+    attemptedModels,
+    errorCode: "AI_ALL_MODELS_FAILED",
+    message: "Workers AI no respondió correctamente",
+    ok: false,
+    selectedModel: null,
   };
 }
 
@@ -1742,15 +1858,15 @@ export async function getContextualChatResponse(
 
     if (provider === "workers-ai") {
       try {
-        const chatOutput = await callWorkersAi(env, message, mode, context, requestId);
+        const aiResult = await callWorkersAi(env, message, mode, context, requestId);
         return success(
           buildChatResponseData({
-            chatOutput,
+            chatOutput: aiResult.chatOutput,
             context,
             fallbackReason: null,
             fallbackUsed: false,
             mode,
-            model: workersAiModel(env),
+            model: aiResult.model,
             provider: "workers-ai",
             requestId,
             startedAt,

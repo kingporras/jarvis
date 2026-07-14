@@ -14,6 +14,7 @@ Variables permitidas:
 
 - `AI_PROVIDER`
 - `WORKERS_AI_MODEL`
+- `WORKERS_AI_FALLBACK_MODELS`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
 - `OPENAI_MAX_OUTPUT_TOKENS`
@@ -23,6 +24,7 @@ Valores recomendados:
 ```text
 AI_PROVIDER=deterministic
 WORKERS_AI_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
+WORKERS_AI_FALLBACK_MODELS=@cf/meta/llama-3.1-8b-instruct,@cf/meta/llama-3-8b-instruct,@cf/mistral/mistral-7b-instruct-v0.1
 ```
 
 No se anaden secrets, claves hardcodeadas ni dependencias nuevas.
@@ -42,6 +44,18 @@ El modelo por defecto si `WORKERS_AI_MODEL` falta es:
 ```text
 @cf/qwen/qwen3-30b-a3b-fp8
 ```
+
+Si el modelo principal falla, JARVIS intenta modelos Workers AI de respaldo. Primero usa `WORKERS_AI_MODEL` y luego `WORKERS_AI_FALLBACK_MODELS`, sin repetir modelos y con un maximo de 4 intentos. Si `WORKERS_AI_FALLBACK_MODELS` no existe, usa esta lista interna segura:
+
+```text
+@cf/meta/llama-3.1-8b-instruct
+@cf/meta/llama-3-8b-instruct
+@cf/mistral/mistral-7b-instruct-v0.1
+```
+
+El diagnostico privado `GET /api/ai/status?test=workers-ai` devuelve `attemptedModels` y `selectedModel`. `selectedModel` indica el primer modelo que respondio correctamente al prompt minimo de prueba. Si un modelo devuelve una estructura inesperada o una respuesta que no contiene el texto esperado, aparece como `AI_MODEL_FAILED` o `AI_RESPONSE_UNPARSEABLE` en el intento, sin exponer la respuesta completa.
+
+Si todos los modelos fallan, el diagnostico devuelve `AI_ALL_MODELS_FAILED` y el Chat responde con fallback determinista usando `fallbackReason=WORKERS_AI_ALL_MODELS_FAILED`. En ese caso hay que revisar que los modelos configurados esten disponibles para la cuenta de Cloudflare y probar otro valor en `WORKERS_AI_FALLBACK_MODELS`.
 
 ## OpenAI opcional
 
@@ -79,6 +93,7 @@ La respuesta de `/api/chat/context` incluye metadata segura:
 - `provider`
 - `model`
 - `fallbackUsed`
+- `fallbackReason`
 - `latencyMs`
 - `requestId`
 - `usedContext`
@@ -93,6 +108,7 @@ La pagina `/chat` muestra:
 - proveedor;
 - modelo;
 - fallback si/no;
+- motivo de fallback;
 - latencia;
 - request id;
 - contexto usado.

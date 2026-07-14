@@ -12,6 +12,7 @@ export type AiProvider = "workers-ai" | "openai" | "deterministic";
 export type FallbackReason =
   | "AI_PROVIDER_NOT_WORKERS_AI"
   | "AI_BINDING_MISSING"
+  | "WORKERS_AI_ALL_MODELS_FAILED"
   | "WORKERS_AI_REQUEST_FAILED"
   | "OPENAI_NOT_CONFIGURED"
   | "OPENAI_REQUEST_FAILED"

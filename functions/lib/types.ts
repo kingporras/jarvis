@@ -30,6 +30,7 @@ export interface Env {
   OPENAI_API_KEY?: string;
   OPENAI_MAX_OUTPUT_TOKENS?: string;
   OPENAI_MODEL?: string;
+  WORKERS_AI_FALLBACK_MODELS?: string;
   WORKERS_AI_MODEL?: string;
 }
 
