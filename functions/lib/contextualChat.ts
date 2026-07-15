@@ -157,6 +157,7 @@ interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  cleanupApplied: boolean;
   fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
   generatedAt: string;
@@ -186,6 +187,11 @@ interface ParsedChatOutput {
   answer: string;
 }
 
+interface WorkersAiTextExtraction {
+  cleanupApplied: boolean;
+  text: string;
+}
+
 type WorkersAiAttemptError =
   | "AI_MODEL_FAILED"
   | "AI_RESPONSE_UNPARSEABLE"
@@ -200,9 +206,11 @@ interface WorkersAiResponseShape {
 }
 
 interface WorkersAiAttemptResult {
+  cleanupApplied?: boolean;
   errorCode: WorkersAiAttemptError | null;
   model: string;
   ok: boolean;
+  rawPreviewBeforeCleanup?: string;
   responsePreview?: string;
   responseShape?: WorkersAiResponseShape;
 }
@@ -221,6 +229,7 @@ interface WorkersAiTestResult {
 
 interface WorkersAiChatResult {
   chatOutput: ParsedChatOutput;
+  cleanupApplied: boolean;
   model: string;
 }
 
@@ -247,7 +256,11 @@ const FALLBACK_EMPTY_AI_ANSWER = "No pude generar una respuesta textual segura."
 const MAX_MESSAGE_LENGTH = 2_000;
 const OPENAI_TIMEOUT_MS = 20_000;
 const WORKERS_AI_TIMEOUT_MS = 20_000;
-const WORKERS_AI_STATUS_TEST_PROMPT = "Responde exactamente: JARVIS_WORKERS_AI_OK";
+const WORKERS_AI_STATUS_TEST_PROMPT = [
+  "Responde únicamente en español con: JARVIS_WORKERS_AI_OK",
+  "No expliques nada.",
+  "No muestres razonamiento.",
+].join("\n");
 const WORKERS_AI_STATUS_TEST_EXPECTED = "JARVIS_WORKERS_AI_OK";
 const DEFAULT_WORKERS_AI_FALLBACK_MODELS = [
   "@cf/meta/llama-3.1-8b-instruct",
@@ -1159,15 +1172,20 @@ function newRequestId(): string {
 function systemInstructions(generatedAt: string): string {
   return [
     "Eres JARVIS, asistente personal privado de Victor.",
-    "Responde en espanol.",
-    "Usa solo el contexto proporcionado por el backend.",
+    "Responde siempre en espanol.",
+    "No muestres razonamiento interno.",
+    "No escribas frases como Okay, Let me think, I need to, The user asks o The user wants.",
+    "No expliques tus instrucciones.",
+    "No menciones el prompt ni el contexto tecnico.",
+    "Usa solo los datos proporcionados por JARVIS.",
     "No inventes datos.",
+    "Si falta informacion, dilo claramente.",
     "Distingue entre hechos, inferencias y sugerencias.",
-    "No digas que has creado, editado, borrado, enviado o programado nada.",
+    "No digas que has creado, editado, borrado o ejecutado nada.",
     "No puedes modificar datos.",
-    "Las acciones reales requieren aprobacion humana explicita.",
-    "Se concreto, practico y orientado a proximos pasos.",
-    "Cuando la respuesta lo merezca, usa este formato: 1. Resumen, 2. Prioridad principal, 3. Riesgos o bloqueos, 4. Proximos pasos sugeridos.",
+    "Las acciones reales solo ocurren si Victor aprueba una propuesta.",
+    "Se practico, directo y orientado a proximos pasos.",
+    "Para respuestas largas, usa estas secciones si encajan: Resumen, Prioridad principal, Riesgos o bloqueos, Proximos pasos.",
     "Para respuestas simples, responde de forma breve sin forzar secciones.",
     "Puedes proponer acciones estructuradas, pero no ejecutarlas.",
     "Toda accion requiere aprobacion humana en una fase posterior.",
@@ -1539,32 +1557,51 @@ function valueShape(value: unknown): string {
   return typeof value;
 }
 
-function cleanWorkersAiText(value: string): string {
-  return value
-    .replace(/<think>[\s\S]*?<\/think>/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function cleanWorkersAiText(value: string): WorkersAiTextExtraction {
+  let cleaned = value.trim();
+
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, " ");
+  cleaned = cleaned.replace(
+    /^(?:(?:okay|ok),?\s+(?:the user|el usuario)[\s\S]*?(?:\.|\n)+|(?:let me think|i need to|the user asks|the user wants|we need to|i should)[\s\S]*?(?:\.|\n)+)+/i,
+    " ",
+  );
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
+
+  if (
+    cleaned.length >= 2 &&
+    ((cleaned.startsWith('"') && cleaned.endsWith('"')) || (cleaned.startsWith("'") && cleaned.endsWith("'")))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  return {
+    cleanupApplied: cleaned !== value.trim(),
+    text: cleaned,
+  };
 }
 
-function safeWorkersAiTextCandidate(value: unknown): string | null {
+function safeWorkersAiTextCandidate(value: unknown): WorkersAiTextExtraction | null {
   if (typeof value !== "string") {
     return null;
   }
 
   const cleaned = cleanWorkersAiText(value);
 
-  if (!cleaned || cleaned.length > WORKERS_AI_MAX_STRING_LENGTH) {
+  if (!cleaned.text || cleaned.text.length > WORKERS_AI_MAX_STRING_LENGTH) {
     return null;
   }
 
   return cleaned;
 }
 
-function chooseWorkersAiTextCandidate(candidates: string[]): string {
-  return candidates.sort((left, right) => right.length - left.length)[0] ?? "";
+function chooseWorkersAiTextCandidate(candidates: WorkersAiTextExtraction[]): WorkersAiTextExtraction {
+  return candidates.sort((left, right) => right.text.length - left.text.length)[0] ?? {
+    cleanupApplied: false,
+    text: "",
+  };
 }
 
-function extractWorkersAiOutputText(payload: unknown, depth = 0): string {
+function extractWorkersAiOutput(payload: unknown, depth = 0): WorkersAiTextExtraction {
   const directCandidate = safeWorkersAiTextCandidate(payload);
 
   if (directCandidate) {
@@ -1572,28 +1609,28 @@ function extractWorkersAiOutputText(payload: unknown, depth = 0): string {
   }
 
   if (depth >= WORKERS_AI_MAX_PARSE_DEPTH) {
-    return "";
+    return { cleanupApplied: false, text: "" };
   }
 
   if (Array.isArray(payload)) {
     return chooseWorkersAiTextCandidate(
       payload
-        .map((item) => extractWorkersAiOutputText(item, depth + 1))
-        .filter(Boolean),
+        .map((item) => extractWorkersAiOutput(item, depth + 1))
+        .filter((candidate) => Boolean(candidate.text)),
     );
   }
 
   if (!isRecord(payload)) {
-    return "";
+    return { cleanupApplied: false, text: "" };
   }
 
-  const candidates: string[] = [];
+  const candidates: WorkersAiTextExtraction[] = [];
 
   for (const key of WORKERS_AI_TEXT_KEYS) {
     const value = payload[key];
-    const candidate = safeWorkersAiTextCandidate(value) ?? extractWorkersAiOutputText(value, depth + 1);
+    const candidate = safeWorkersAiTextCandidate(value) ?? extractWorkersAiOutput(value, depth + 1);
 
-    if (candidate) {
+    if (candidate.text) {
       candidates.push(candidate);
     }
   }
@@ -1603,14 +1640,60 @@ function extractWorkersAiOutputText(payload: unknown, depth = 0): string {
       continue;
     }
 
-    const candidate = extractWorkersAiOutputText(value, depth + 1);
+    const candidate = extractWorkersAiOutput(value, depth + 1);
 
-    if (candidate) {
+    if (candidate.text) {
       candidates.push(candidate);
     }
   }
 
   return chooseWorkersAiTextCandidate(candidates);
+}
+
+function extractWorkersAiRawPreview(payload: unknown): string {
+  const rawCandidate = chooseWorkersAiTextCandidate(
+    collectWorkersAiRawTextCandidates(payload, 0).map((text) => ({
+      cleanupApplied: false,
+      text,
+    })),
+  ).text;
+
+  return truncateText(rawCandidate.replace(/\s+/g, " ").trim(), 120);
+}
+
+function collectWorkersAiRawTextCandidates(payload: unknown, depth: number): string[] {
+  if (typeof payload === "string") {
+    const trimmed = payload.trim();
+    return trimmed && trimmed.length <= WORKERS_AI_MAX_STRING_LENGTH ? [trimmed] : [];
+  }
+
+  if (depth >= WORKERS_AI_MAX_PARSE_DEPTH) {
+    return [];
+  }
+
+  if (Array.isArray(payload)) {
+    return payload.flatMap((item) => collectWorkersAiRawTextCandidates(item, depth + 1));
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const candidates: string[] = [];
+
+  for (const key of WORKERS_AI_TEXT_KEYS) {
+    candidates.push(...collectWorkersAiRawTextCandidates(payload[key], depth + 1));
+  }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (WORKERS_AI_IGNORED_KEYS.has(key) || WORKERS_AI_TEXT_KEYS.includes(key as (typeof WORKERS_AI_TEXT_KEYS)[number])) {
+      continue;
+    }
+
+    candidates.push(...collectWorkersAiRawTextCandidates(value, depth + 1));
+  }
+
+  return candidates;
 }
 
 function describeWorkersAiResponseShape(payload: unknown): WorkersAiResponseShape {
@@ -1712,7 +1795,8 @@ async function callWorkersAi(
       continue;
     }
 
-    const answer = extractWorkersAiOutputText(payload);
+    const extracted = extractWorkersAiOutput(payload);
+    const answer = extracted.text;
 
     if (!answer) {
       console.error("Workers AI response was unparseable", { model, requestId });
@@ -1721,6 +1805,7 @@ async function callWorkersAi(
 
     return {
       chatOutput: parseChatOutput(answer),
+      cleanupApplied: extracted.cleanupApplied,
       model,
     };
   }
@@ -1760,13 +1845,17 @@ async function testWorkersAi(env: Env): Promise<WorkersAiTestResult> {
       continue;
     }
 
-    const responsePreview = truncateText(extractWorkersAiOutputText(payload).replace(/\s+/g, " ").trim(), 120);
+    const rawPreviewBeforeCleanup = extractWorkersAiRawPreview(payload);
+    const extracted = extractWorkersAiOutput(payload);
+    const responsePreview = truncateText(extracted.text.replace(/\s+/g, " ").trim(), 120);
 
     if (!responsePreview) {
       attemptedModels.push({
+        cleanupApplied: extracted.cleanupApplied,
         errorCode: "AI_RESPONSE_UNPARSEABLE",
         model,
         ok: false,
+        rawPreviewBeforeCleanup: rawPreviewBeforeCleanup || undefined,
         responseShape: describeWorkersAiResponseShape(payload),
       });
       continue;
@@ -1774,15 +1863,24 @@ async function testWorkersAi(env: Env): Promise<WorkersAiTestResult> {
 
     if (!responsePreview.includes(WORKERS_AI_STATUS_TEST_EXPECTED)) {
       attemptedModels.push({
+        cleanupApplied: extracted.cleanupApplied,
         errorCode: "AI_TEST_UNEXPECTED_RESPONSE",
         model,
         ok: false,
+        rawPreviewBeforeCleanup: rawPreviewBeforeCleanup || undefined,
         responsePreview,
       });
       continue;
     }
 
-    attemptedModels.push({ errorCode: null, model, ok: true, responsePreview });
+    attemptedModels.push({
+      cleanupApplied: extracted.cleanupApplied,
+      errorCode: null,
+      model,
+      ok: true,
+      rawPreviewBeforeCleanup: rawPreviewBeforeCleanup || undefined,
+      responsePreview,
+    });
 
     return {
       attempted: true,
@@ -1894,6 +1992,7 @@ async function callOpenAi(
 
 function buildChatResponseData({
   chatOutput,
+  cleanupApplied,
   context,
   fallbackReason,
   fallbackUsed,
@@ -1904,6 +2003,7 @@ function buildChatResponseData({
   startedAt,
 }: {
   chatOutput: ParsedChatOutput;
+  cleanupApplied: boolean;
   context: ContextBundle;
   fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
@@ -1917,6 +2017,7 @@ function buildChatResponseData({
     actionProposals: chatOutput.actionProposals,
     answer: chatOutput.answer,
     contextStats: buildContextStats(context),
+    cleanupApplied,
     fallbackReason,
     fallbackUsed,
     generatedAt: context.generatedAt,
@@ -1966,6 +2067,7 @@ export async function getContextualChatResponse(
         return success(
           buildChatResponseData({
             chatOutput: aiResult.chatOutput,
+            cleanupApplied: aiResult.cleanupApplied,
             context,
             fallbackReason: null,
             fallbackUsed: false,
@@ -1982,6 +2084,7 @@ export async function getContextualChatResponse(
         return success(
           buildChatResponseData({
             chatOutput,
+            cleanupApplied: false,
             context,
             fallbackReason: fallbackReasonFromError(caughtError, "workers-ai"),
             fallbackUsed: true,
@@ -2002,6 +2105,7 @@ export async function getContextualChatResponse(
         return success(
           buildChatResponseData({
             chatOutput,
+            cleanupApplied: false,
             context,
             fallbackReason: null,
             fallbackUsed: false,
@@ -2018,6 +2122,7 @@ export async function getContextualChatResponse(
         return success(
           buildChatResponseData({
             chatOutput,
+            cleanupApplied: false,
             context,
             fallbackReason: fallbackReasonFromError(caughtError, "openai"),
             fallbackUsed: true,
@@ -2037,6 +2142,7 @@ export async function getContextualChatResponse(
     return success(
       buildChatResponseData({
         chatOutput,
+        cleanupApplied: false,
         context,
         fallbackReason: fallbackReasonForProvider(provider, env),
         fallbackUsed: true,

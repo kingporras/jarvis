@@ -283,6 +283,14 @@ function fallbackReasonLabel(response: ContextualChatResponse | null): string {
   return response.fallbackReason ? fallbackReasonLabels[response.fallbackReason] : "Ninguno";
 }
 
+function cleanupAppliedLabel(response: ContextualChatResponse | null): string {
+  if (!response) {
+    return "Sin respuesta";
+  }
+
+  return response.cleanupApplied ? "Si" : "No";
+}
+
 function formatProposalPayloadValue(key: string, value: string | null): string {
   if (!value) {
     return "Sin definir";
@@ -715,6 +723,10 @@ export function ChatPage() {
               <div>
                 <span>Motivo fallback</span>
                 <strong>{fallbackReasonLabel(lastResponse)}</strong>
+              </div>
+              <div>
+                <span>Limpieza IA</span>
+                <strong>{cleanupAppliedLabel(lastResponse)}</strong>
               </div>
               <div>
                 <span>Latencia</span>

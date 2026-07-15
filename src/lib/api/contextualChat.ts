@@ -94,6 +94,7 @@ export interface ContextualChatResponse {
   actionProposals: ActionProposal[];
   answer: string;
   contextStats: ContextStats;
+  cleanupApplied: boolean;
   fallbackReason: FallbackReason | null;
   fallbackUsed: boolean;
   generatedAt: string;

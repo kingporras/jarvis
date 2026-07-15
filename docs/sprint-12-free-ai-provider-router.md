@@ -45,6 +45,8 @@ El modelo por defecto si `WORKERS_AI_MODEL` falta es:
 @cf/qwen/qwen3-30b-a3b-fp8
 ```
 
+Workers AI esta validado en produccion con Qwen (`@cf/qwen/qwen3-30b-a3b-fp8`). El Chat usa Workers AI cuando `AI_PROVIDER=workers-ai`; OpenAI queda como proveedor opcional solo si se configura explicitamente con `AI_PROVIDER=openai`.
+
 Si el modelo principal falla, JARVIS intenta modelos Workers AI de respaldo. Primero usa `WORKERS_AI_MODEL` y luego `WORKERS_AI_FALLBACK_MODELS`, sin repetir modelos y con un maximo de 4 intentos. Si `WORKERS_AI_FALLBACK_MODELS` no existe, usa esta lista interna segura:
 
 ```text
@@ -55,7 +57,9 @@ Si el modelo principal falla, JARVIS intenta modelos Workers AI de respaldo. Pri
 
 El diagnostico privado `GET /api/ai/status?test=workers-ai` devuelve `attemptedModels` y `selectedModel`. `selectedModel` indica el primer modelo que respondio correctamente al prompt minimo de prueba. Si un modelo devuelve una estructura inesperada, aparece `AI_RESPONSE_UNPARSEABLE` con `responseShape`: tipo superior, claves superiores, claves anidadas y rutas de campos string, sin exponer la respuesta completa.
 
-El parser de Workers AI acepta varias formas de respuesta usadas por modelos como Qwen: `response`, `text`, `generated_text`, `output`, `content`, `message`, `completion`, arrays de `response`, `choices`, `messages` y objetos anidados dentro de `result`. Tambien elimina bloques `<think>...</think>` y compacta espacios antes de entregar texto al Chat.
+El parser de Workers AI acepta varias formas de respuesta usadas por modelos como Qwen: `response`, `text`, `generated_text`, `output`, `content`, `message`, `completion`, arrays de `response`, `choices`, `messages` y objetos anidados dentro de `result`. Tambien elimina bloques `<think>...</think>`, preambulos claros como `Okay, the user...` o `Let me think...`, comillas envolventes y espacios excesivos antes de entregar texto al Chat.
+
+La metadata `cleanupApplied` indica si JARVIS tuvo que limpiar la respuesta del modelo antes de mostrarla. En diagnostico, `rawPreviewBeforeCleanup` muestra como maximo 120 caracteres seguros antes de limpieza y `responsePreview` muestra la version ya limpia.
 
 La diferencia entre errores de diagnostico es:
 
@@ -67,7 +71,7 @@ Si todos los modelos fallan, el diagnostico devuelve `AI_ALL_MODELS_FAILED` y el
 
 ## OpenAI opcional
 
-`AI_PROVIDER=openai` usa OpenAI solo si `OPENAI_API_KEY` y `OPENAI_MODEL` estan configurados. Si faltan o la llamada falla, el Chat responde con fallback determinista. El frontend ya no depende de un error de OpenAI para informar al usuario.
+`AI_PROVIDER=openai` usa OpenAI solo si `OPENAI_API_KEY` y `OPENAI_MODEL` estan configurados. Si faltan o la llamada falla, el Chat responde con fallback determinista. El frontend ya no depende de un error de OpenAI para informar al usuario. `AI_PROVIDER=workers-ai` no intenta OpenAI.
 
 ## Fallback determinista
 
@@ -102,6 +106,7 @@ La respuesta de `/api/chat/context` incluye metadata segura:
 - `model`
 - `fallbackUsed`
 - `fallbackReason`
+- `cleanupApplied`
 - `latencyMs`
 - `requestId`
 - `usedContext`
@@ -117,11 +122,12 @@ La pagina `/chat` muestra:
 - modelo;
 - fallback si/no;
 - motivo de fallback;
+- limpieza IA si/no;
 - latencia;
 - request id;
 - contexto usado.
 
-Si falta Workers AI u OpenAI, el usuario ve que esta activo el modo local determinista.
+Si `fallbackUsed=false`, JARVIS respondio con el proveedor indicado y el modelo mostrado. Si `fallbackUsed=true`, JARVIS uso el fallback determinista local y `fallbackReason` explica por que. El fallback determinista sigue disponible para mantener respuesta sin IA externa.
 
 ## Seguridad y alcance
 
